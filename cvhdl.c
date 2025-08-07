@@ -20,7 +20,15 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // TODO: Parse C code from fin
+    // Step 1: Read the input C file line by line and print each line (basic parsing)
+    char line[1024];
+    printf("Parsing input file:\n");
+    while (fgets(line, sizeof(line), fin)) {
+        // For now, just print each line (later, you can tokenize and analyze)
+        printf("%s", line);
+        // TODO: Tokenize and process each line for code generation
+    }
+
     // TODO: Generate VHDL code to fout
 
     fprintf(fout, "-- VHDL code generated from %s\n", argv[1]);
