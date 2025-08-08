@@ -5,9 +5,10 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 
 ## ✨ Features
 
-- 📝 Lexical analysis of C code
-- 🏗️ Basic parsing of function declarations
-- 🛠️ Generation of VHDL entity skeletons
+- 📝 Lexical analysis of C code (tokenizer)
+- 🏗️ Parsing of function declarations and parameter lists
+- 🌳 Abstract Syntax Tree (AST) construction
+- 🛠️ Generation of VHDL entities and architecture skeletons
 
 ## 🛠️ Installation
 
@@ -26,16 +27,27 @@ make
 ./compi input.c output.vhdl
 ```
 
+## 🧪 Testing
+
+You can test the compiler with example C files provided in the `examples/` directory:
+
+```bash
+./compi ../examples/example.c output.vhdl
+```
+
 ## ⚠️ Limitations
 
-- Only basic function declarations are supported
+- Only basic function declarations and parameter lists are supported
 - Function bodies and complex statements are not yet translated
+- No support for pointers, arrays, or advanced C features in parameters
 
 ## 🗺️ Roadmap
 
 - Support for expressions and statements
-- Translation of control structures
+- Translation of control structures (if, for, while)
 - Improved VHDL code generation
+- Support for variable declarations and assignments
+- Error reporting improvements
 
 ## 📄 License
 

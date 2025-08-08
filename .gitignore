@@ -1,0 +1,27 @@
+# Build artifacts
+/build/
+/CMakeFiles/
+/CMakeCache.txt
+/Makefile
+/*.o
+/*.obj
+/*.out
+/*.a
+/*.so
+
+# Generated files
+*.vhdl
+*.vhd
+
+# Editor/IDE files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+.DS_Store
+
+# OS files
+Thumbs.db
+
+# Test
