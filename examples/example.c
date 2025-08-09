@@ -1,42 +1,38 @@
-// simple.c - Example for compi compiler
+// example.c - Example for compi compiler
 
 // A simple function that can be converted to VHDL
 int add(int a, int b) {
-    return a + b;
-}
-
-// Another function with void return type
-void process_data(int data[], int length) {
-    int i;
-    for (i = 0; i < length; i++) {
-        data[i] = data[i] * 2;
-    }
-}
-
-// Function with multiple parameters
-int calculate_sum(int a, int b, int c) {
-    int sum = a + b + c;
+    int sum = 6;
     return sum;
 }
 
-// Function with no parameters
-void nop() {
-    // does nothing
+// Function with no parameters and a variable declaration
+int nop() {
+    int x;
+    x = 42;
+    return x;
+}
+
+// Function with multiple parameters
+int calculate_sum(double a, int b, int c) {
+    int result = 5;
+    result = 6;
+    return result;
 }
 
 // Function with different parameter types
 float multiply(float x, float y) {
-    return x * y;
+    return y;
 }
 
 // Function with a single parameter
 int square(int x) {
-    return x * x;
+    return x;
 }
 
 // Function with mixed types
 double mix(int a, float b, double c) {
-    return a + b + c;
+    return b;
 }
 
 // Function with pointer parameter

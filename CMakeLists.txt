@@ -6,7 +6,7 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Add executable and sources
-add_executable(compi compi.c token.c parse.c)
+add_executable(compi compi.c token.c parse.c utils.c)
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

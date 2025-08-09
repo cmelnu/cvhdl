@@ -12,6 +12,7 @@ typedef enum {
     NODE_EXPRESSION,
     NODE_LITERAL,
     NODE_IDENTIFIER,
+    NODE_ASSIGNMENT,
     NODE_BINARY_OP
 } NodeType;
 
@@ -40,5 +41,6 @@ ASTNode* create_node(NodeType type);
 void add_child(ASTNode *parent, ASTNode *child);
 void free_node(ASTNode *node);
 void generate_vhdl(ASTNode* node, FILE* output);
+void print_ast(ASTNode* node, int level);
 
 #endif

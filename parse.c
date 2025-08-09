@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "parse.h"
+#include "utils.h"
 
 // Current token and functions to manage the token stream
 extern Token current_token;
@@ -195,20 +196,177 @@ ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
     }
     
     // Parse statements in function body
-    // TODO: Implement full statement parsing
-    // For now, just consume tokens until closing brace
     int brace_depth = 1;
     while (brace_depth > 0 && !match(TOKEN_EOF)) {
-        if (match(TOKEN_BRACE_OPEN)) brace_depth++;
-        else if (match(TOKEN_BRACE_CLOSE)) brace_depth--;
+        if (match(TOKEN_BRACE_OPEN)) {
+            brace_depth++;
+            advance(input);
+        } else if (match(TOKEN_BRACE_CLOSE)) {
+            brace_depth--;
+            advance(input);
+        } else {
+            // Parse a statement and add it as a child of the function node
+            ASTNode* stmt = parse_statement(input);
+            if (stmt) add_child(func_node, stmt);
+        }
+    }
+
+    return func_node;
+}
+
+// Parse a single statement inside a function body
+ASTNode* parse_statement(FILE *input) {
+    // Declare all nodes and tokens at the beginning
+    ASTNode *stmt_node = NULL;
+    ASTNode *var_decl_node = NULL;
+    ASTNode *init_expr = NULL;
+    ASTNode *return_expr = NULL;
+    ASTNode *assign_node = NULL;
+    ASTNode *lhs_node = NULL;
+    ASTNode *rhs_node = NULL;
+    Token type_token;
+    Token name_token;
+    Token lhs_token;
+
+    // Create a generic statement node
+    stmt_node = create_node(NODE_STATEMENT);
+
+    // Variable declaration: e.g., int x;
+    if (match(TOKEN_KEYWORD) && (
+            strcmp(current_token.value, "int") == 0 ||
+            strcmp(current_token.value, "float") == 0 ||
+            strcmp(current_token.value, "char") == 0 ||
+            strcmp(current_token.value, "double") == 0)) {
+
+        type_token = current_token;
+        advance(input);
+
+        // Expect an identifier (variable name)
+        if (match(TOKEN_IDENTIFIER)) {
+            name_token = current_token;
+            advance(input);
+
+            var_decl_node = create_node(NODE_VAR_DECL);
+            var_decl_node->token = type_token;
+            var_decl_node->value = strdup(name_token.value);
+
+            // Optionally handle initialization (e.g., int x = 5;)
+            if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
+                advance(input);
+                init_expr = parse_expression(input);
+                if (init_expr) add_child(var_decl_node, init_expr);
+                while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+                    advance(input);
+                }
+            }
+
+            if (!consume(input, TOKEN_SEMICOLON)) {
+                printf("Error: Expected ';' after variable declaration\n");
+            }
+
+            add_child(stmt_node, var_decl_node);
+            return stmt_node;
+        } else {
+            printf("Error: Expected variable name after type\n");
+            while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+                advance(input);
+            }
+            if (match(TOKEN_SEMICOLON)) advance(input);
+            return stmt_node;
+        }
+    }
+
+    // Assignment statement: x = value;
+    if (match(TOKEN_IDENTIFIER)) {
+        lhs_token = current_token;
+        advance(input);
+
+        if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
+            advance(input);
+
+            assign_node = create_node(NODE_ASSIGNMENT);
+
+            // Left-hand side node
+            lhs_node = create_node(NODE_EXPRESSION);
+            lhs_node->value = strdup(lhs_token.value);
+            add_child(assign_node, lhs_node);
+
+            // Right-hand side node
+            rhs_node = parse_expression(input);
+            if (rhs_node) add_child(assign_node, rhs_node);
+
+            // Expect semicolon
+            if (!consume(input, TOKEN_SEMICOLON)) {
+                printf("Error: Expected ';' after assignment\n");
+            }
+
+            add_child(stmt_node, assign_node);
+            return stmt_node;
+        } else {
+            // Not an assignment, skip to semicolon
+            while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+                advance(input);
+            }
+            if (match(TOKEN_SEMICOLON)) advance(input);
+            return stmt_node;
+        }
+    }
+
+    // Parse return statement: return <expr>;
+    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "return") == 0) {
+        stmt_node->token = current_token;
+        advance(input);
+
+        // Parse an optional expression after 'return'
+        return_expr = parse_expression(input);
+        if (return_expr) add_child(stmt_node, return_expr);
+
+        if (!consume(input, TOKEN_SEMICOLON)) {
+            printf("Error: Expected ';' after return statement\n");
+        }
+        return stmt_node;
+    }
+
+    // TODO: Add parsing for if, while, etc.
+
+    // Skip unknown statement (consume until semicolon or brace)
+    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
         advance(input);
     }
-    
-    return func_node;
+    if (match(TOKEN_SEMICOLON)) advance(input);
+    return stmt_node;
+}
+
+// Parse a simple expression (currently only supports a single identifier or number)
+ASTNode* parse_expression(FILE *input) {
+    ASTNode *expr_node = NULL;
+
+    // Handle a number literal
+    if (match(TOKEN_NUMBER)) {
+        expr_node = create_node(NODE_EXPRESSION);
+        expr_node->value = strdup(current_token.value);
+        advance(input);
+        return expr_node;
+    }
+
+    // Handle an identifier (variable or parameter)
+    if (match(TOKEN_IDENTIFIER)) {
+        expr_node = create_node(NODE_EXPRESSION);
+        expr_node->value = strdup(current_token.value);
+        advance(input);
+        return expr_node;
+    }
+
+    // (Optional) Extend here for operators, binary expressions, etc.
+
+    // If not a valid expression, return NULL
+    return NULL;
 }
 
 // Generate VHDL code from an AST
 void generate_vhdl(ASTNode* node, FILE* output) {
+
+    char* result_vhdl_type = "std_logic_vector(31 downto 0)"; // default
     
     if (!node) return;
     
@@ -225,32 +383,101 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             }
             break;
             
-        case NODE_FUNCTION_DECL:
+        case NODE_FUNCTION_DECL: {
             fprintf(output, "-- Function: %s\n", node->value);
             fprintf(output, "entity %s is\n", node->value);
             fprintf(output, "  port (\n");
             fprintf(output, "    clk : in std_logic;\n");
             fprintf(output, "    reset : in std_logic;\n");
-            // TODO: Add proper ports based on function parameters
-            fprintf(output, "    -- Parameters would be converted to ports\n");
-            fprintf(output, "    result : out std_logic_vector(31 downto 0)\n");
+
+            // Generate ports for parameters with type mapping
+            int param_count = 0;
+            for (int i = 0; i < node->num_children; i++) {
+                ASTNode *child = node->children[i];
+                if (child->type == NODE_VAR_DECL) {
+                    fprintf(output, "    %s : in %s%s\n",
+                        child->value,
+                        ctype_to_vhdl(child->token.value),
+                        (param_count == node->num_children - 1) ? "," : ";");
+                    param_count++;
+                }
+            }
+
+            // --- Determine return type for result port ---
+            // Use function return type if possible
+            if (node->token.value && strlen(node->token.value) > 0) {
+                result_vhdl_type = ctype_to_vhdl(node->token.value);
+            }
+            // Optionally, check if the return value matches a parameter type
+            // (already handled by function return type in most cases)
+
+            fprintf(output, "    result : out %s\n", result_vhdl_type);
             fprintf(output, "  );\n");
             fprintf(output, "end entity;\n\n");
-            
+
             fprintf(output, "architecture behavioral of %s is\n", node->value);
-            // TODO: Generate signals from local variables
-            fprintf(output, "  -- Internal signals would be declared here\n");
+
+            // Declare internal signals for local variables (statements) with type mapping
+            for (int i = 0; i < node->num_children; i++) {
+                ASTNode *child = node->children[i];
+                if (child->type == NODE_STATEMENT) {
+                    for (int j = 0; j < child->num_children; j++) {
+                        ASTNode *stmt_child = child->children[j];
+                        if (stmt_child->type == NODE_VAR_DECL) {
+                            // KNOWN ISSUE: When declaring local signals, rename any that collide with "result"
+                            //TODO: fix it asap
+                            if (strcmp(stmt_child->value, "result") == 0) {
+                                fprintf(output, "  signal internal_%s : %s;\n", 
+                                    stmt_child->value,
+                                    ctype_to_vhdl(stmt_child->token.value));
+                            } else {
+                                fprintf(output, "  signal %s : %s;\n",
+                                    stmt_child->value,
+                                    ctype_to_vhdl(stmt_child->token.value));
+                            }
+                        }
+                    }
+                }
+            }
+
             fprintf(output, "begin\n");
             fprintf(output, "  process(clk, reset)\n");
             fprintf(output, "  begin\n");
             fprintf(output, "    if reset = '1' then\n");
             fprintf(output, "      -- Reset logic\n");
             fprintf(output, "    elsif rising_edge(clk) then\n");
-            fprintf(output, "      -- Function body would be translated here\n");
+            for (int i = 0; i < node->num_children; i++) {
+                ASTNode *child = node->children[i];
+                if (child->type == NODE_STATEMENT) {
+                    generate_vhdl(child, output); // This will emit result <= ...;
+                }
+            }
             fprintf(output, "    end if;\n");
             fprintf(output, "  end process;\n");
             fprintf(output, "end architecture;\n\n");
             break;
+        }
+            
+        case NODE_STATEMENT: {
+            for (int i = 0; i < node->num_children; i++) {
+                ASTNode *child = node->children[i];
+                if (child->type == NODE_EXPRESSION) {
+                    fprintf(output, "      result <= %s;\n", child->value ? child->value : "std_logic_vector(to_unsigned(0, 32))");
+                }
+                // Assignment statement code generation
+                if (child->type == NODE_ASSIGNMENT) {
+                    // Expect: child->children[0] = lhs, child->children[1] = rhs
+                    if (child->num_children == 2 &&
+                        child->children[0]->type == NODE_EXPRESSION &&
+                        child->children[1]->type == NODE_EXPRESSION) {
+                        fprintf(output, "      %s <= %s;\n",
+                            child->children[0]->value ? child->children[0]->value : "unknown",
+                            child->children[1]->value ? child->children[1]->value : "unknown");
+                    }
+                }
+            }
+            break;
+        }
             
         // Add cases for other node types as you implement them
         default:
