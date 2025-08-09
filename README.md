@@ -6,9 +6,12 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 ## ✨ Features
 
 - 📝 Lexical analysis of C code (tokenizer)
-- 🏗️ Parsing of function declarations and parameter lists
-- 🌳 Abstract Syntax Tree (AST) construction
+- 🏗️ Parsing of function declarations, parameter lists, variable declarations, assignments, and return statements
+- 🌳 Abstract Syntax Tree (AST) construction with visualization
 - 🛠️ Generation of VHDL entities and architecture skeletons
+- 🔄 Automatic type mapping between C types (`int`, `float`, `double`, `char`) and VHDL types
+- 🗂️ Example C files for testing in `examples/`
+- 📚 Sphinx documentation in `docs/` with Read the Docs theme
 
 ## 🛠️ Installation
 
@@ -27,28 +30,87 @@ make
 ./compi input.c output.vhdl
 ```
 
-## 🧪 Testing
+### Debugging
 
-You can test the compiler with example C files provided in the `examples/` directory:
-
+Print the AST for debugging:
 ```bash
-./compi ../examples/example.c output.vhdl
+./compi -d input.c output.vhdl
 ```
 
-## ⚠️ Limitations
+## 📖 Documentation
 
-- Only basic function declarations and parameter lists are supported
-- Function bodies and complex statements are not yet translated
-- No support for pointers, arrays, or advanced C features in parameters
+Sphinx documentation is available in the `docs/` folder.  
+To build the docs:
+```bash
+cmake --build . --target docs
+"$BROWSER" docs/build/html/index.html
+```
+
+## 🧹 Cleaning
+
+To remove build artifacts and documentation output:
+```bash
+cmake --build . --target clean-all
+```
+
+## 🗂️ Project Structure
+
+- `src/` — Source code (.c, .h files)
+- `examples/` — Example C files for testing
+- `docs/` — Sphinx documentation
+- `build/` — Build output
+- `CMakeLists.txt` — Build configuration
+- `.gitignore` — Git ignore rules
+
+## 🚧 Known Issues
+
+- Signal name collision for local variable 'result' in VHDL output ports (should be renamed to 'internal_result')
+- Global variables not yet implemented
+- Limited expression parsing (only identifiers and literals)
+- No support for control flow statements (`if`, `while`, `for`)
+- VHDL codegen does not optimize for hardware resources or timing
 
 ## 🗺️ Roadmap
 
-- Support for expressions and statements
-- Translation of control structures (if, for, while)
-- Improved VHDL code generation
-- Support for variable declarations and assignments
-- Error reporting improvements
+Here’s what’s planned next for Compi, based on the current state of `parse.c` and recent development:
 
-## 📄 License
+### ✅ Current Capabilities
+- Function declarations and parameter parsing
+- Variable declarations and initializations
+- Assignment statements (`x = value;`)
+- Return statements with expressions
+- AST construction and visualization
+- Basic VHDL code generation with type mapping
 
-This project is licensed under the GNU General Public License v3.0.
+### 🚧 Roadmap
+
+1. **Expression Parsing Improvements**
+   - Support binary operations (e.g., `a + b`, `x * 2`)
+   - Handle operator precedence and parentheses
+
+2. **Control Flow Statements**
+   - Parse and represent `if`, `while`, and `for` statements in the AST
+   - Generate VHDL comments or skeletons for control flow
+
+3. **Global Variable Support**
+   - Parse and represent global variable declarations
+   - Generate VHDL for global signals
+
+4. **Function Calls**
+   - Parse function calls within expressions and statements
+   - Inline or generate VHDL for simple calls
+
+5. **Error Handling & Diagnostics**
+   - Improve error messages and diagnostics for unsupported constructs
+
+6. **VHDL Codegen Enhancements**
+   - Optimize generated VHDL for hardware resources and timing
+   - Handle signal name collisions (e.g., local `result`)
+
+7. **Documentation & Examples**
+   - Expand Sphinx documentation with module, function, and data structure details
+   - Add more example C files and expected VHDL outputs
+
+---
+
+Contributions and

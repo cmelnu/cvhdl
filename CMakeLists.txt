@@ -5,8 +5,10 @@ project(compi VERSION 0.1 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Add executable and sources
-add_executable(compi compi.c token.c parse.c utils.c)
+# Automatically include all .c files in src/
+file(GLOB COMPI_SRC "src/*.c")
+
+add_executable(compi ${COMPI_SRC})
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -16,3 +18,10 @@ endif()
 # Install targets
 install(TARGETS compi
         RUNTIME DESTINATION)
+
+# Docs target for Sphinx documentation
+add_custom_target(docs
+    COMMAND sphinx-build -b html docs/source docs/build/html
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Building HTML documentation with Sphinx"
+)
