@@ -11,18 +11,20 @@ int nop() {
 
 int calculate_sum(double a, int b, int c) {
 
+    int i = 0;
     double arr[3] = {1,2,3};
     char word[4] = {'w', 'o', 'r', 'd'};
     arr[2] = 6;
     int f = ~5;
     if (c == 0 || b == 5 && a != 10){
-        arr[3] = 78;
+        arr[2] = 78;
         return f;
     }
     else if (!c){
         f = ~67;
     }
-    return ~6;
+
+    return arr[i];
 }
 
 int bitwise(int x, int y) {

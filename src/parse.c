@@ -8,6 +8,44 @@
 // Current token and functions to manage the token stream
 extern Token current_token;
 
+// Simple per-function array table for bounds checking
+typedef struct {
+    char name[64];
+    int size; // number of elements
+} ArrayInfo;
+static ArrayInfo g_arrays[128];
+static int g_array_count = 0;
+
+static void register_array(const char *name, int size) {
+    if (!name || size <= 0) return;
+    if (g_array_count >= (int)(sizeof(g_arrays) / sizeof(g_arrays[0]))) return;
+    // Prevent duplicates
+    for (int i = 0; i < g_array_count; i++) {
+        if (strcmp(g_arrays[i].name, name) == 0) { g_arrays[i].size = size; return; }
+    }
+    strncpy(g_arrays[g_array_count].name, name, sizeof(g_arrays[g_array_count].name) - 1);
+    g_arrays[g_array_count].name[sizeof(g_arrays[g_array_count].name) - 1] = '\0';
+    g_arrays[g_array_count].size = size;
+    g_array_count++;
+}
+
+static int find_array_size(const char *name) {
+    if (!name) return -1;
+    for (int i = 0; i < g_array_count; i++) {
+        if (strcmp(g_arrays[i].name, name) == 0) return g_arrays[i].size;
+    }
+    return -1;
+}
+
+static int is_number_str(const char *s) {
+    if (!s || !*s) return 0;
+    const char *p = s;
+    if (*p == '+' || *p == '-') p++;
+    if (!*p) return 0;
+    while (*p) { if (!isdigit((unsigned char)*p)) return 0; p++; }
+    return 1;
+}
+
 // Create a new AST node
 ASTNode* create_node(NodeType type) {
 
@@ -135,6 +173,8 @@ ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
     memset(&param_name, 0, sizeof(Token));
     ASTNode *param_node = NULL;
     ASTNode* func_node = create_node(NODE_FUNCTION_DECL);
+    // Reset per-function array table
+    g_array_count = 0;
     
     // Store return type
     func_node->token = return_type;
@@ -253,7 +293,7 @@ ASTNode* parse_statement(FILE *input) {
             // Array declaration: int arr[10];
             int is_array = 0;
             char arr_size_buf[32] = {0};
-            if (match(TOKEN_BRACKET_OPEN)) {
+        if (match(TOKEN_BRACKET_OPEN)) {
                 is_array = 1;
                 advance(input);
                 if (match(TOKEN_NUMBER)) {
@@ -264,6 +304,8 @@ ASTNode* parse_statement(FILE *input) {
                     free(var_decl_node->value);
                     var_decl_node->value = strdup(buf);
                     advance(input);
+            // Register array for bounds checking
+            register_array(name_token.value, atoi(arr_size_buf));
                 } else {
                     printf("Error: Expected array size after '['\n");
                     exit(EXIT_FAILURE);
@@ -330,25 +372,46 @@ ASTNode* parse_statement(FILE *input) {
 
         // Check for array access: arr[i]
         ASTNode *lhs_expr = NULL;
-        if (match(TOKEN_BRACKET_OPEN)) {
+    if (match(TOKEN_BRACKET_OPEN)) {
             advance(input);
-            if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
-                ASTNode *arr_idx = create_node(NODE_EXPRESSION);
-                arr_idx->value = strdup(current_token.value);
+            // Capture full index expression as a string until ']'
+            char idx_buf[512] = {0};
+            int paren_depth = 0;
+            while (!match(TOKEN_EOF)) {
+                if (match(TOKEN_BRACKET_CLOSE) && paren_depth == 0) break;
+                if (match(TOKEN_PARENTHESIS_OPEN)) {
+                    strncat(idx_buf, "(", sizeof(idx_buf) - strlen(idx_buf) - 1);
+                    advance(input);
+                    paren_depth++;
+                    continue;
+                }
+                if (match(TOKEN_PARENTHESIS_CLOSE)) {
+                    strncat(idx_buf, ")", sizeof(idx_buf) - strlen(idx_buf) - 1);
+                    advance(input);
+                    if (paren_depth > 0) paren_depth--;
+                    continue;
+                }
+                if (current_token.value) {
+                    strncat(idx_buf, current_token.value, sizeof(idx_buf) - strlen(idx_buf) - 1);
+                }
                 advance(input);
-                if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-                    printf("Error: Expected ']' after array index\n");
+            }
+            if (!consume(input, TOKEN_BRACKET_CLOSE)) {
+                printf("Error: Expected ']' after array index\n");
+                exit(EXIT_FAILURE);
+            }
+            lhs_expr = create_node(NODE_EXPRESSION);
+            char buf[700];
+            snprintf(buf, sizeof(buf), "%s[%s]", lhs_token.value, idx_buf);
+            lhs_expr->value = strdup(buf);
+            // Static bounds check for numeric literal index
+            if (is_number_str(idx_buf)) {
+                int idx_val = atoi(idx_buf);
+                int arr_size = find_array_size(lhs_token.value);
+                if (arr_size > 0 && (idx_val < 0 || idx_val >= arr_size)) {
+                    printf("Error: Array index %d out of bounds for '%s' with size %d\n", idx_val, lhs_token.value, arr_size);
                     exit(EXIT_FAILURE);
                 }
-                lhs_expr = create_node(NODE_EXPRESSION);
-                // Store as "arr[i]"
-                char buf[128];
-                snprintf(buf, sizeof(buf), "%s[%s]", lhs_token.value, arr_idx->value);
-                lhs_expr->value = strdup(buf);
-                free_node(arr_idx);
-            } else {
-                printf("Error: Expected array index after '['\n");
-                exit(EXIT_FAILURE);
             }
         } else {
             lhs_expr = create_node(NODE_EXPRESSION);
@@ -581,8 +644,61 @@ static ASTNode* parse_primary(FILE *input) {
         return node;
     }
 
-    // Identifier or number
-    if (match(TOKEN_IDENTIFIER) || match(TOKEN_NUMBER)) {
+    // Identifier or number (support array access with full index expression but stored as string)
+    if (match(TOKEN_IDENTIFIER)) {
+        char ident_buf[128] = {0};
+        strncpy(ident_buf, current_token.value, sizeof(ident_buf)-1);
+        advance(input);
+        // Check for array indexing: ident[expr]
+        if (match(TOKEN_BRACKET_OPEN)) {
+            advance(input);
+            // Capture full index expression as a string until ']'
+            char idx_buf[512] = {0};
+            int paren_depth = 0;
+            while (!match(TOKEN_EOF)) {
+                if (match(TOKEN_BRACKET_CLOSE) && paren_depth == 0) break;
+                if (match(TOKEN_PARENTHESIS_OPEN)) {
+                    strncat(idx_buf, "(", sizeof(idx_buf) - strlen(idx_buf) - 1);
+                    advance(input);
+                    paren_depth++;
+                    continue;
+                }
+                if (match(TOKEN_PARENTHESIS_CLOSE)) {
+                    strncat(idx_buf, ")", sizeof(idx_buf) - strlen(idx_buf) - 1);
+                    advance(input);
+                    if (paren_depth > 0) paren_depth--;
+                    continue;
+                }
+                if (current_token.value) {
+                    strncat(idx_buf, current_token.value, sizeof(idx_buf) - strlen(idx_buf) - 1);
+                }
+                advance(input);
+            }
+            if (!consume(input, TOKEN_BRACKET_CLOSE)) {
+                printf("Error: Expected ']' after array index in expression\n");
+                exit(EXIT_FAILURE);
+            }
+            ASTNode *node = create_node(NODE_EXPRESSION);
+            char val_buf[700];
+            snprintf(val_buf, sizeof(val_buf), "%s[%s]", ident_buf, idx_buf);
+            node->value = strdup(val_buf);
+            // Static bounds check when index is numeric literal
+            if (is_number_str(idx_buf)) {
+                int idx_val = atoi(idx_buf);
+                int arr_size = find_array_size(ident_buf);
+                if (arr_size > 0 && (idx_val < 0 || idx_val >= arr_size)) {
+                    printf("Error: Array index %d out of bounds for '%s' with size %d\n", idx_val, ident_buf, arr_size);
+                    exit(EXIT_FAILURE);
+                }
+            }
+            return node;
+        } else {
+            ASTNode *node = create_node(NODE_EXPRESSION);
+            node->value = strdup(ident_buf);
+            return node;
+        }
+    }
+    if (match(TOKEN_NUMBER)) {
         ASTNode *node = create_node(NODE_EXPRESSION);
         node->value = strdup(current_token.value);
         advance(input);
