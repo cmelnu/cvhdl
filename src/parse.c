@@ -426,9 +426,6 @@ ASTNode* parse_statement(FILE *input) {
     return stmt_node;
 }
 
-// Forward declarations
-static ASTNode* parse_expression_prec(FILE *input, int min_prec);
-static ASTNode* parse_primary(FILE *input);
 
 static int get_precedence(const char *op) {
     if (!op) return -1;

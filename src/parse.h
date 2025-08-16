@@ -44,11 +44,10 @@ void add_child(ASTNode *parent, ASTNode *child);
 void free_node(ASTNode *node);
 void generate_vhdl(ASTNode* node, FILE* output);
 void print_ast(ASTNode* node, int level);
+static ASTNode* parse_expression_prec(FILE *input, int min_prec);
+static ASTNode* parse_primary(FILE *input);
 
 // Helper for VHDL codegen
 int is_negative_literal(const char* value);
-
-// Helper for type mapping
-const char* ctype_to_vhdl(const char* ctype);
 
 #endif
