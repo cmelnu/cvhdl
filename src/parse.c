@@ -3,6 +3,7 @@
 #include <string.h>
 #include "parse.h"
 #include "utils.h"
+#include <ctype.h>
 
 // Current token and functions to manage the token stream
 extern Token current_token;
@@ -77,13 +78,11 @@ ASTNode* parse_program(FILE *input) {
     Token func_name, return_type;
     ASTNode *func_node = NULL;
     ASTNode* program_node = create_node(NODE_PROGRAM);
-    
-    // Start by getting the first token
-    advance(input);
-    
-    // Keep parsing functions until EOF
-    while (!match(TOKEN_EOF)) {
 
+    advance(input); // Ensure this is present
+
+    while (!match(TOKEN_EOF)) {
+        printf("Parsing token: type=%d, value='%s'\n", current_token.type, current_token.value ? current_token.value : "");
         // Check for function declaration
         if (match(TOKEN_KEYWORD)) {
 
@@ -100,7 +99,8 @@ ASTNode* parse_program(FILE *input) {
                     // This is likely a function declaration
                     // Don't rewind the file - this causes problems
                     func_node = parse_function(input, return_type, func_name);
-                    if (func_node != NULL) {  // Check for NULL before adding
+                    if (func_node != NULL) {
+                        printf("Parsed function: %s\n", func_node->value); // Debug print
                         add_child(program_node, func_node);
                     }
                 } else {
@@ -327,7 +327,96 @@ ASTNode* parse_statement(FILE *input) {
         return stmt_node;
     }
 
-    // TODO: Add parsing for if, while, etc.
+    // Parse if statement: if (<expr>) { ... }
+    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "if") == 0) {
+        advance(input);
+
+        // Expect '('
+        if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+            printf("Error: Expected '(' after 'if'\n");
+            return stmt_node;
+        }
+
+        // Parse condition expression
+        ASTNode *cond_expr = parse_expression(input);
+
+        if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+            printf("Error: Expected ')' after if condition\n");
+            return stmt_node;
+        }
+
+        // Expect '{'
+        if (!consume(input, TOKEN_BRACE_OPEN)) {
+            printf("Error: Expected '{' after if condition\n");
+            return stmt_node;
+        }
+
+        // Parse statements inside if block
+        ASTNode *if_node = create_node(NODE_IF_STATEMENT);
+        if (cond_expr) add_child(if_node, cond_expr);
+
+        while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+            ASTNode *inner_stmt = parse_statement(input);
+            if (inner_stmt) add_child(if_node, inner_stmt);
+        }
+
+        if (!consume(input, TOKEN_BRACE_CLOSE)) {
+            printf("Error: Expected '}' after if block\n");
+        }
+
+        // Check for else if / else
+        while (match(TOKEN_KEYWORD) && strcmp(current_token.value, "else") == 0) {
+            advance(input);
+            if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "if") == 0) {
+                // else if
+                advance(input);
+                if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+                    printf("Error: Expected '(' after 'else if'\n");
+                    break;
+                }
+                ASTNode *elseif_cond = parse_expression(input);
+                if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+                    printf("Error: Expected ')' after else if condition\n");
+                    break;
+                }
+                if (!consume(input, TOKEN_BRACE_OPEN)) {
+                    printf("Error: Expected '{' after else if condition\n");
+                    break;
+                }
+                ASTNode *elseif_node = create_node(NODE_ELSE_IF_STATEMENT);
+                if (elseif_cond) add_child(elseif_node, elseif_cond);
+                while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+                    ASTNode *inner_stmt = parse_statement(input);
+                    if (inner_stmt) add_child(elseif_node, inner_stmt);
+                }
+                if (!consume(input, TOKEN_BRACE_CLOSE)) {
+                    printf("Error: Expected '}' after else if block\n");
+                }
+                add_child(if_node, elseif_node);
+            } else {
+                // else
+                if (!consume(input, TOKEN_BRACE_OPEN)) {
+                    printf("Error: Expected '{' after else\n");
+                    break;
+                }
+                ASTNode *else_node = create_node(NODE_ELSE_STATEMENT);
+                while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+                    ASTNode *inner_stmt = parse_statement(input);
+                    if (inner_stmt) add_child(else_node, inner_stmt);
+                }
+                if (!consume(input, TOKEN_BRACE_CLOSE)) {
+                    printf("Error: Expected '}' after else block\n");
+                }
+                add_child(if_node, else_node);
+                break; // Only one else allowed
+            }
+        }
+
+        add_child(stmt_node, if_node);
+        return stmt_node;
+    }
+
+    // TODO: Add parsing for while, etc.
 
     // Skip unknown statement (consume until semicolon or brace)
     while (!match(TOKEN_SEMICOLON) && !match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
@@ -339,28 +428,81 @@ ASTNode* parse_statement(FILE *input) {
 
 // Parse a simple expression (currently only supports a single identifier or number)
 ASTNode* parse_expression(FILE *input) {
-    ASTNode *expr_node = NULL;
+    ASTNode *left = NULL;
+    ASTNode *right = NULL;
+    ASTNode *bin_expr = NULL;
 
-    // Handle a number literal
-    if (match(TOKEN_NUMBER)) {
-        expr_node = create_node(NODE_EXPRESSION);
-        expr_node->value = strdup(current_token.value);
+    // Handle unary minus for numbers and identifiers
+    int is_negative = 0;
+    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
         advance(input);
-        return expr_node;
+        is_negative = 1;
     }
 
-    // Handle an identifier (variable or parameter)
-    if (match(TOKEN_IDENTIFIER)) {
-        expr_node = create_node(NODE_EXPRESSION);
-        expr_node->value = strdup(current_token.value);
+    // Parse left operand (number or identifier)
+    if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
+        left = create_node(NODE_EXPRESSION);
+        if (is_negative) {
+            // Prepend '-' to the value for both numbers and identifiers
+            char buf[128];
+            snprintf(buf, sizeof(buf), "-%s", current_token.value);
+            left->value = strdup(buf);
+        } else {
+            left->value = strdup(current_token.value);
+        }
         advance(input);
-        return expr_node;
+    } else {
+        return NULL;
     }
 
-    // (Optional) Extend here for operators, binary expressions, etc.
+    // Parse chained binary operations (left-associative, no precedence)
+    while (match(TOKEN_OPERATOR) &&
+        (strcmp(current_token.value, "==") == 0 ||
+         strcmp(current_token.value, "!=") == 0 ||
+         strcmp(current_token.value, "<") == 0 ||
+         strcmp(current_token.value, "<=") == 0 ||
+         strcmp(current_token.value, ">") == 0 ||
+         strcmp(current_token.value, ">=") == 0 ||
+         strcmp(current_token.value, "+") == 0 ||
+         strcmp(current_token.value, "-") == 0 ||
+         strcmp(current_token.value, "*") == 0 ||
+         strcmp(current_token.value, "/") == 0)) {
 
-    // If not a valid expression, return NULL
-    return NULL;
+        bin_expr = create_node(NODE_BINARY_EXPR);
+        bin_expr->value = strdup(current_token.value);
+        add_child(bin_expr, left);
+
+        advance(input);
+
+        // Handle unary minus for right operand
+        int right_is_negative = 0;
+        if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
+            advance(input);
+            right_is_negative = 1;
+        }
+
+        if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
+            right = create_node(NODE_EXPRESSION);
+            if (right_is_negative) {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "-%s", current_token.value);
+                right->value = strdup(buf);
+            } else {
+                right->value = strdup(current_token.value);
+            }
+            advance(input);
+        } else {
+            right = parse_expression(input);
+            if (!right) {
+                printf("Error: Expected right operand after binary operator\n");
+                return left;
+            }
+        }
+        add_child(bin_expr, right);
+        left = bin_expr;
+    }
+
+    return left;
 }
 
 // Generate VHDL code from an AST
@@ -461,26 +603,145 @@ void generate_vhdl(ASTNode* node, FILE* output) {
         case NODE_STATEMENT: {
             for (int i = 0; i < node->num_children; i++) {
                 ASTNode *child = node->children[i];
-                if (child->type == NODE_EXPRESSION) {
-                    fprintf(output, "      result <= %s;\n", child->value ? child->value : "std_logic_vector(to_unsigned(0, 32))");
+                // Handle variable declaration with initialization
+                if (child->type == NODE_VAR_DECL) {
+                    if (child->num_children > 0) {
+                        ASTNode *init = child->children[0];
+                        fprintf(output, "      %s <= ", child->value ? child->value : "unknown");
+                        generate_vhdl(init, output);
+                        fprintf(output, ";\n");
+                    }
                 }
                 // Assignment statement code generation
                 if (child->type == NODE_ASSIGNMENT) {
-                    // Expect: child->children[0] = lhs, child->children[1] = rhs
-                    if (child->num_children == 2 &&
-                        child->children[0]->type == NODE_EXPRESSION &&
-                        child->children[1]->type == NODE_EXPRESSION) {
-                        fprintf(output, "      %s <= %s;\n",
-                            child->children[0]->value ? child->children[0]->value : "unknown",
-                            child->children[1]->value ? child->children[1]->value : "unknown");
+                    if (child->num_children == 2) {
+                        ASTNode *lhs = child->children[0];
+                        ASTNode *rhs = child->children[1];
+                        fprintf(output, "      %s <= ", lhs->value ? lhs->value : "unknown");
+                        generate_vhdl(rhs, output);
+                        fprintf(output, ";\n");
                     }
+                }
+                // If statement VHDL generation
+                if (child->type == NODE_IF_STATEMENT) {
+                    generate_vhdl(child, output);
+                }
+                // Handle direct expression as return value
+                if (child->type == NODE_EXPRESSION) {
+                    fprintf(output, "      result <= %s;\n", child->value ? child->value : "std_logic_vector(to_unsigned(0, 32))");
                 }
             }
             break;
         }
             
-        // Add cases for other node types as you implement them
-        default:
+        case NODE_BINARY_EXPR: {
+            const char *op = node->value;
+            if (strcmp(op, "==") == 0) op = "=";
+            else if (strcmp(op, "!=") == 0) op = "/=";
+
+            // For comparison, wrap operands with unsigned() unless negative literal, then use to_signed()
+            if (strcmp(op, "=") == 0 || strcmp(op, "/=") == 0 ||
+                strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
+                strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
+
+                // Left operand
+                ASTNode *left = node->children[0];
+                ASTNode *right = node->children[1];
+                if (left->type == NODE_EXPRESSION && is_negative_literal(left->value)) {
+                    fprintf(output, "to_signed(%s, 32)", left->value);
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(left, output);
+                    fprintf(output, ")");
+                }
+                fprintf(output, " %s ", op);
+                // Right operand
+                if (right->type == NODE_EXPRESSION && is_negative_literal(right->value)) {
+                    fprintf(output, "to_signed(%s, 32)", right->value);
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(right, output);
+                    fprintf(output, ")");
+                }
+            } else {
+                // Arithmetic: just output operands and operator
+                generate_vhdl(node->children[0], output);
+                fprintf(output, " %s ", op);
+                generate_vhdl(node->children[1], output);
+            }
             break;
+        }
+        case NODE_IF_STATEMENT: {
+            ASTNode *cond = node->children[0];
+            fprintf(output, "      if ");
+            if (cond->type == NODE_BINARY_EXPR) {
+                generate_vhdl(cond, output);
+                fprintf(output, " then\n");
+            } else if (cond->type == NODE_EXPRESSION && cond->value) {
+                fprintf(output, "unsigned(%s) /= 0 then\n", cond->value);
+            } else {
+                fprintf(output, "(%s) then\n", cond->value ? cond->value : "false");
+            }
+            // If block statements
+            for (int j = 1; j < node->num_children; j++) {
+                ASTNode *branch = node->children[j];
+                if (branch->type == NODE_ELSE_IF_STATEMENT) {
+                    ASTNode *elseif_cond = branch->children[0];
+                    fprintf(output, "      elsif ");
+                    if (elseif_cond->type == NODE_BINARY_EXPR) {
+                        generate_vhdl(elseif_cond, output);
+                        fprintf(output, " then\n");
+                    } else if (elseif_cond->type == NODE_EXPRESSION && elseif_cond->value) {
+                        fprintf(output, "unsigned(%s) /= 0 then\n", elseif_cond->value);
+                    } else {
+                        fprintf(output, "(%s) then\n", elseif_cond->value ? elseif_cond->value : "false");
+                    }
+                    for (int k = 1; k < branch->num_children; k++) {
+                        generate_vhdl(branch->children[k], output);
+                    }
+                } else if (branch->type == NODE_ELSE_STATEMENT) {
+                    fprintf(output, "      else\n");
+                    for (int k = 0; k < branch->num_children; k++) {
+                        generate_vhdl(branch->children[k], output);
+                    }
+                } else {
+                    generate_vhdl(branch, output);
+                }
+            }
+            fprintf(output, "      end if;\n");
+            break;
+        }
+        case NODE_EXPRESSION: {
+            if (is_negative_literal(node->value)) {
+                // If it's a negative identifier (e.g., -y)
+                if (isalpha(node->value[1]) || node->value[1] == '_') {
+                    fprintf(output, "-unsigned(%s)", node->value + 1);
+                } else {
+                    // Negative number (int or float)
+                    fprintf(output, "to_signed(%s, 32)", node->value);
+                }
+            } else {
+                fprintf(output, "%s", node->value ? node->value : "unknown");
+            }
+            break;
+        }
     }
+}
+
+// Add this helper function above generate_vhdl:
+int is_negative_literal(const char* value) {
+    if (!value || value[0] != '-' || strlen(value) < 2)
+        return 0;
+    // Accept -123, -1.23, -0.5, -123.0, -y, -var, etc.
+    int i = 1;
+    int has_valid = 0;
+    while (value[i]) {
+        if (isdigit(value[i]) || value[i] == '.' || isalpha(value[i]) || value[i] == '_') {
+            has_valid = 1;
+        } else {
+            return 0;
+        }
+        i++;
+    }
+    return has_valid;
 }

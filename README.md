@@ -6,7 +6,7 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 ## ✨ Features
 
 - 📝 Lexical analysis of C code (tokenizer)
-- 🏗️ Parsing of function declarations, parameter lists, variable declarations, assignments, and return statements
+- 🏗️ Parsing of function declarations, parameter lists, variable declarations, assignments, return statements, and `if`/`else if`/`else` control flow
 - 🌳 Abstract Syntax Tree (AST) construction with visualization
 - 🛠️ Generation of VHDL entities and architecture skeletons
 - 🔄 Automatic type mapping between C types (`int`, `float`, `double`, `char`) and VHDL types
@@ -67,7 +67,7 @@ cmake --build . --target clean-all
 - Signal name collision for local variable 'result' in VHDL output ports (should be renamed to 'internal_result')
 - Global variables not yet implemented
 - Limited expression parsing (only identifiers and literals)
-- No support for control flow statements (`if`, `while`, `for`)
+- No support for `while` and `for` control flow statements
 - VHDL codegen does not optimize for hardware resources or timing
 
 ## 🗺️ Roadmap
@@ -80,6 +80,8 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 - Assignment statements (`x = value;`)
 - Return statements with expressions
 - AST construction and visualization
+- Parsing and code generation for `if`, `else if`, and `else` statements
+- Support for unary minus and negative literals/identifiers in expressions
 - Basic VHDL code generation with type mapping
 
 ### 🚧 Roadmap
@@ -89,7 +91,7 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
    - Handle operator precedence and parentheses
 
 2. **Control Flow Statements**
-   - Parse and represent `if`, `while`, and `for` statements in the AST
+   - Parse and represent `while` and `for` statements in the AST
    - Generate VHDL comments or skeletons for control flow
 
 3. **Global Variable Support**
@@ -113,4 +115,5 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 
 ---
 
-Contributions and
+Contributions and feedback are welcome!  
+Join the discussion and development at [GitHub - cmelnu/compi](https://github.com/cmelnu/compi)
