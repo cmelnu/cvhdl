@@ -49,27 +49,27 @@ make
 ./compi input.c output.vhdl
 ```
 
-### Debugging
+
+### Debugging & Error Reporting
+
+**Debug mode (-d):**
 
 Print the AST for debugging:
 ```bash
 ./compi -d input.c output.vhdl
 ```
 
-This prints a readable AST where expression nodes are labeled, e.g.:
+This prints a readable AST tree with labeled nodes and branches, making it easier to understand the structure of parsed code and debug issues.
+
+**Improved error diagnostics:**
+
+When a parsing error occurs, the compiler now reports the exact line number in the source file where the error was detected. For example:
 
 ```
-NODE_FUNCTION_DECL: foo (return type: int)
-   NODE_STATEMENT
-      NODE_ASSIGNMENT
-         NODE_EXPRESSION: x
-         NODE_BINARY_EXPR: &&
-            NODE_EXPRESSION: x
-            NODE_EXPRESSION: 7
-   NODE_STATEMENT
-      NODE_UNARY_OP: !
-         NODE_EXPRESSION: x
+Error (line 15): Expected ';' after variable declaration
 ```
+
+This helps quickly locate and fix syntax errors in your C source files.
 
 ## 📖 Documentation
 

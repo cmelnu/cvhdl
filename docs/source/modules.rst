@@ -11,25 +11,30 @@ compi.c
 ------
 The main entry point for the compiler. Handles command-line arguments, file I/O, and orchestrates the parsing and code generation process. It calls the parser to build the AST and then invokes the VHDL generator.
 
+
 parse.c
--------
+--------
 Implements the parser and AST construction. Responsible for:
 
 - Parsing function declarations, parameters, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`).
 - Building the AST (Abstract Syntax Tree) for the input C code.
 - Handling binary expressions, unary minus, and negative literals/identifiers.
 - Supporting nested and chained expressions for assignments and conditions.
+- Printing improved error messages with the exact line number of the source file where parsing errors occur.
+- Debug mode (-d) prints a readable AST tree for easier debugging.
 
 parse.h
 -------
 Defines the AST node types, parser function prototypes, and supporting data structures for parsing.
 
+
 token.c
--------
+--------
 Implements the lexical analyzer (tokenizer). Responsible for:
 
 - Breaking the input C code into tokens (keywords, identifiers, numbers, operators, punctuation).
 - Skipping whitespace and comments.
+- Tracking the line number of each token for improved error diagnostics.
 - Providing the token stream for the parser.
 
 token.h

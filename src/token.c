@@ -5,6 +5,7 @@
 
 // Current token and functions to manage the token stream
 Token current_token;
+int current_line = 1; // Track current line number
 
 // List of C keywords
 const char *keywords[] = {
@@ -52,8 +53,12 @@ Token get_next_token(FILE *input) {
     Token token;
     int c;
 
+    token.line = current_line; // Track line at start of token
+
     // Skip whitespace
-    while ((c = fgetc(input)) != EOF && isspace(c));
+    while ((c = fgetc(input)) != EOF && isspace(c)) {
+        if (c == '\n') current_line++; // Increment line on newline
+    }
     if (c == EOF) {
         token.type = TOKEN_EOF;
         token.value[0] = '\0';
@@ -66,11 +71,13 @@ Token get_next_token(FILE *input) {
         if (d == '/') {
             // Line comment
             while ((c = fgetc(input)) != EOF && c != '\n');
+            if (c == '\n') current_line++; // Increment line on comment newline
             return get_next_token(input);
         } else if (d == '*') {
             // Block comment
             int prev = 0;
             while ((c = fgetc(input)) != EOF) {
+                if (c == '\n') current_line++;
                 if (prev == '*' && c == '/') break;
                 prev = c;
             }

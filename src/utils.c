@@ -1,56 +1,66 @@
 #include "utils.h"
 
-// Helper function to print indentation
-void print_indent(int level) {
+
+// Helper function to print tree branches for AST visualization
+static void print_tree_prefix(int level, int is_last) {
     for (int i = 0; i < level; i++) {
-        printf("  ");
+        printf("%s", (i == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
     }
 }
 
-// Print the AST recursively for visualization
+// Print the AST recursively in a readable tree format
 void print_ast(ASTNode* node, int level) {
-
     if (!node) return;
 
-    print_indent(level);
-    
+    int is_last = 1;
+    if (node->parent) {
+        ASTNode *parent = node->parent;
+        for (int i = 0; i < parent->num_children; i++) {
+            if (parent->children[i] == node) {
+                is_last = (i == parent->num_children - 1);
+                break;
+            }
+        }
+    }
+    print_tree_prefix(level, is_last);
+
     switch (node->type) {
         case NODE_PROGRAM:
-            printf("NODE_PROGRAM\n");
+            printf("PROGRAM\n");
             break;
         case NODE_FUNCTION_DECL:
-            printf("NODE_FUNCTION_DECL: %s (return type: %s)\n",
+            printf("FUNCTION: %s (returns: %s)\n",
                    node->value ? node->value : "(null)",
                    node->token.value);
             break;
         case NODE_VAR_DECL:
-            printf("NODE_VAR_DECL: %s %s\n",
+            printf("VAR: %s %s\n",
                    node->token.value,
                    node->value ? node->value : "(null)");
             break;
         case NODE_STATEMENT:
-            printf("NODE_STATEMENT\n");
+            printf("STATEMENT\n");
             break;
         case NODE_EXPRESSION:
-            printf("NODE_EXPRESSION: %s\n", node->value ? node->value : "(null)");
+            printf("EXPR: %s\n", node->value ? node->value : "(null)");
             break;
         case NODE_BINARY_EXPR:
-            printf("NODE_BINARY_EXPR: %s\n", node->value ? node->value : "(op)");
+            printf("BINARY: %s\n", node->value ? node->value : "(op)");
             break;
         case NODE_ASSIGNMENT:
-            printf("NODE_ASSIGNMENT\n");
+            printf("ASSIGN\n");
             break;
         case NODE_BINARY_OP:
-            printf("NODE_UNARY_OP: %s\n", node->value ? node->value : "(unary)");
+            printf("UNARY: %s\n", node->value ? node->value : "(unary)");
             break;
         case NODE_IF_STATEMENT:
-            printf("NODE_IF_STATEMENT\n");
+            printf("IF\n");
             break;
         case NODE_ELSE_IF_STATEMENT:
-            printf("NODE_ELSE_IF_STATEMENT\n");
+            printf("ELSE IF\n");
             break;
         case NODE_ELSE_STATEMENT:
-            printf("NODE_ELSE_STATEMENT\n");
+            printf("ELSE\n");
             break;
         default:
             printf("NODE_TYPE_%d\n", node->type);

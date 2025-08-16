@@ -3,6 +3,7 @@
 #include <string.h>
 #include "parse.h"
 #include "utils.h"
+#include "token.h"
 #include <ctype.h>
 
 // Current token and functions to manage the token stream
@@ -184,7 +185,7 @@ ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
     
     // We're already at the opening parenthesis, consume it
     if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
-        printf("Error: Expected '(' after function name\n");
+        printf("Error (line %d): Expected '(' after function name\n", current_token.line);
         free_node(func_node);
         exit(EXIT_FAILURE);
     }
@@ -213,7 +214,7 @@ ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
                     advance(input);
                 }
             } else {
-                printf("Error: Expected parameter name\n");
+                printf("Error (line %d): Expected parameter name\n", current_token.line);
                 break;
             }
         } else {
@@ -223,14 +224,14 @@ ASTNode* parse_function(FILE *input, Token return_type, Token func_name) {
     }
     
     if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-        printf("Error: Expected ')' after parameter list\n");
+        printf("Error (line %d): Expected ')' after parameter list\n", current_token.line);
         free_node(func_node);
         exit(EXIT_FAILURE);
     }
     
     // Expect function body starting with '{'
     if (!consume(input, TOKEN_BRACE_OPEN)) {
-        printf("Error: Expected '{' to start function body\n");
+        printf("Error (line %d): Expected '{' to start function body\n", current_token.line);
         free_node(func_node);
         exit(EXIT_FAILURE);
     }
@@ -307,11 +308,11 @@ ASTNode* parse_statement(FILE *input) {
             // Register array for bounds checking
             register_array(name_token.value, atoi(arr_size_buf));
                 } else {
-                    printf("Error: Expected array size after '['\n");
+                    printf("Error (line %d): Expected array size after '['\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-                    printf("Error: Expected ']' after array size\n");
+                    printf("Error (line %d): Expected ']' after array size\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -338,7 +339,7 @@ ASTNode* parse_statement(FILE *input) {
                         }
                     }
                     if (!consume(input, TOKEN_BRACE_CLOSE)) {
-                        printf("Error: Expected '}' after array initializer\n");
+                        printf("Error (line %d): Expected '}' after array initializer\n", current_token.line);
                         exit(EXIT_FAILURE);
                     }
                     add_child(var_decl_node, init_list);
@@ -353,14 +354,14 @@ ASTNode* parse_statement(FILE *input) {
             }
 
             if (!consume(input, TOKEN_SEMICOLON)) {
-                printf("Error: Expected ';' after variable declaration\n");
+                printf("Error (line %d): Expected ';' after variable declaration\n", current_token.line);
                 exit(EXIT_FAILURE);
             }
 
             add_child(stmt_node, var_decl_node);
             return stmt_node;
         } else {
-            printf("Error: Expected variable name after type\n");
+            printf("Error (line %d): Expected variable name after type\n", current_token.line);
             exit(EXIT_FAILURE);
         }
     }
@@ -397,7 +398,7 @@ ASTNode* parse_statement(FILE *input) {
                 advance(input);
             }
             if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-                printf("Error: Expected ']' after array index\n");
+                printf("Error (line %d): Expected ']' after array index\n", current_token.line);
                 exit(EXIT_FAILURE);
             }
             lhs_expr = create_node(NODE_EXPRESSION);
@@ -409,7 +410,7 @@ ASTNode* parse_statement(FILE *input) {
                 int idx_val = atoi(idx_buf);
                 int arr_size = find_array_size(lhs_token.value);
                 if (arr_size > 0 && (idx_val < 0 || idx_val >= arr_size)) {
-                    printf("Error: Array index %d out of bounds for '%s' with size %d\n", idx_val, lhs_token.value, arr_size);
+                    printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n", current_token.line, idx_val, lhs_token.value, arr_size);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -430,7 +431,7 @@ ASTNode* parse_statement(FILE *input) {
 
             // Expect semicolon
             if (!consume(input, TOKEN_SEMICOLON)) {
-                printf("Error: Expected ';' after assignment\n");
+                printf("Error (line %d): Expected ';' after assignment\n", current_token.line);
                 exit(EXIT_FAILURE);
             }
 
@@ -457,7 +458,7 @@ ASTNode* parse_statement(FILE *input) {
         if (return_expr) add_child(stmt_node, return_expr);
 
         if (!consume(input, TOKEN_SEMICOLON)) {
-            printf("Error: Expected ';' after return statement\n");
+            printf("Error (line %d): Expected ';' after return statement\n", current_token.line);
             exit(EXIT_FAILURE);
         }
         return stmt_node;
@@ -469,7 +470,7 @@ ASTNode* parse_statement(FILE *input) {
 
         // Expect '('
         if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
-            printf("Error: Expected '(' after 'if'\n");
+            printf("Error (line %d): Expected '(' after 'if'\n", current_token.line);
             exit(EXIT_FAILURE);
         }
 
@@ -477,13 +478,13 @@ ASTNode* parse_statement(FILE *input) {
         ASTNode *cond_expr = parse_expression(input);
 
         if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-            printf("Error: Expected ')' after if condition\n");
+            printf("Error (line %d): Expected ')' after if condition\n", current_token.line);
             exit(EXIT_FAILURE);
         }
 
         // Expect '{'
         if (!consume(input, TOKEN_BRACE_OPEN)) {
-            printf("Error: Expected '{' after if condition\n");
+            printf("Error (line %d): Expected '{' after if condition\n", current_token.line);
             exit(EXIT_FAILURE);
         }
 
@@ -497,7 +498,7 @@ ASTNode* parse_statement(FILE *input) {
         }
 
         if (!consume(input, TOKEN_BRACE_CLOSE)) {
-            printf("Error: Expected '}' after if block\n");
+            printf("Error (line %d): Expected '}' after if block\n", current_token.line);
             exit(EXIT_FAILURE);
         }
 
@@ -508,16 +509,16 @@ ASTNode* parse_statement(FILE *input) {
                 // else if
                 advance(input);
                 if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
-                    printf("Error: Expected '(' after 'else if'\n");
+                    printf("Error (line %d): Expected '(' after 'else if'\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 ASTNode *elseif_cond = parse_expression(input);
                 if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-                    printf("Error: Expected ')' after else if condition\n");
+                    printf("Error (line %d): Expected ')' after else if condition\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 if (!consume(input, TOKEN_BRACE_OPEN)) {
-                    printf("Error: Expected '{' after else if condition\n");
+                    printf("Error (line %d): Expected '{' after else if condition\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 ASTNode *elseif_node = create_node(NODE_ELSE_IF_STATEMENT);
@@ -527,14 +528,14 @@ ASTNode* parse_statement(FILE *input) {
                     if (inner_stmt) add_child(elseif_node, inner_stmt);
                 }
                 if (!consume(input, TOKEN_BRACE_CLOSE)) {
-                    printf("Error: Expected '}' after else if block\n");
+                    printf("Error (line %d): Expected '}' after else if block\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 add_child(if_node, elseif_node);
             } else {
                 // else
                 if (!consume(input, TOKEN_BRACE_OPEN)) {
-                    printf("Error: Expected '{' after else\n");
+                    printf("Error (line %d): Expected '{' after else\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 ASTNode *else_node = create_node(NODE_ELSE_STATEMENT);
@@ -543,7 +544,7 @@ ASTNode* parse_statement(FILE *input) {
                     if (inner_stmt) add_child(else_node, inner_stmt);
                 }
                 if (!consume(input, TOKEN_BRACE_CLOSE)) {
-                    printf("Error: Expected '}' after else block\n");
+                    printf("Error (line %d): Expected '}' after else block\n", current_token.line);
                     exit(EXIT_FAILURE);
                 }
                 add_child(if_node, else_node);
@@ -638,7 +639,7 @@ static ASTNode* parse_primary(FILE *input) {
         advance(input);
         ASTNode *node = parse_expression_prec(input, 1);
         if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
-            printf("Error: Expected ')' in expression\n");
+            printf("Error (line %d): Expected ')' after expression\n", current_token.line);
             exit(EXIT_FAILURE);
         }
         return node;
@@ -675,7 +676,7 @@ static ASTNode* parse_primary(FILE *input) {
                 advance(input);
             }
             if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-                printf("Error: Expected ']' after array index in expression\n");
+                printf("Error (line %d): Expected ']' after array index in expression\n", current_token.line);
                 exit(EXIT_FAILURE);
             }
             ASTNode *node = create_node(NODE_EXPRESSION);
@@ -687,7 +688,7 @@ static ASTNode* parse_primary(FILE *input) {
                 int idx_val = atoi(idx_buf);
                 int arr_size = find_array_size(ident_buf);
                 if (arr_size > 0 && (idx_val < 0 || idx_val >= arr_size)) {
-                    printf("Error: Array index %d out of bounds for '%s' with size %d\n", idx_val, ident_buf, arr_size);
+                    printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n", current_token.line, idx_val, ident_buf, arr_size);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -726,7 +727,7 @@ static ASTNode* parse_expression_prec(FILE *input, int min_prec) {
         // Parse right-hand side with higher minimum precedence (left-associative)
     ASTNode *right = parse_expression_prec(input, prec + 1);
         if (!right) {
-            printf("Error: Expected right operand after operator '%s'\n", op_buf);
+            printf("Error (line %d): Expected right operand after operator '%s'\n", current_token.line, op_buf);
             exit(EXIT_FAILURE);
         }
 

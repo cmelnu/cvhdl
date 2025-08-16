@@ -26,6 +26,7 @@ typedef enum {
 typedef struct {
     TokenType type;
     char value[256];
+    int line; // Add this field
 } Token;
 
 // Keyword check
@@ -37,5 +38,7 @@ Token get_next_token(FILE* input);
 void advance(FILE *input);
 int match(TokenType type);
 int consume(FILE *input, TokenType type);
+
+extern int current_line;
 
 #endif // TOKEN_H
