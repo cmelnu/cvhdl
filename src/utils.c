@@ -34,8 +34,23 @@ void print_ast(ASTNode* node, int level) {
         case NODE_EXPRESSION:
             printf("NODE_EXPRESSION: %s\n", node->value ? node->value : "(null)");
             break;
+        case NODE_BINARY_EXPR:
+            printf("NODE_BINARY_EXPR: %s\n", node->value ? node->value : "(op)");
+            break;
         case NODE_ASSIGNMENT:
             printf("NODE_ASSIGNMENT\n");
+            break;
+        case NODE_BINARY_OP:
+            printf("NODE_UNARY_OP: %s\n", node->value ? node->value : "(unary)");
+            break;
+        case NODE_IF_STATEMENT:
+            printf("NODE_IF_STATEMENT\n");
+            break;
+        case NODE_ELSE_IF_STATEMENT:
+            printf("NODE_ELSE_IF_STATEMENT\n");
+            break;
+        case NODE_ELSE_STATEMENT:
+            printf("NODE_ELSE_STATEMENT\n");
             break;
         default:
             printf("NODE_TYPE_%d\n", node->type);

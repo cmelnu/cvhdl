@@ -7,7 +7,14 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 
 - 📝 Lexical analysis of C code (tokenizer)
 - 🏗️ Parsing of function declarations, parameter lists, variable declarations, assignments, return statements, and `if`/`else if`/`else` control flow
-- 🌳 Abstract Syntax Tree (AST) construction with visualization
+- ➕ Expression parsing with proper precedence and associativity:
+   - Arithmetic: `+ - * /`
+   - Shifts: `<< >>`
+   - Bitwise: `& | ^`
+   - Comparisons: `== != < <= > >=`
+   - Logical: `&& ||` and unary `!`
+   - Unary minus: `-x`
+- 🌳 Abstract Syntax Tree (AST) construction with improved visualization (named nodes for binary/unary ops, if/else-if/else)
 - 🛠️ Generation of VHDL entities and architecture skeletons
 - 🔄 Automatic type mapping between C types (`int`, `float`, `double`, `char`) and VHDL types
 - 🗂️ Example C files for testing in `examples/`
@@ -35,6 +42,21 @@ make
 Print the AST for debugging:
 ```bash
 ./compi -d input.c output.vhdl
+```
+
+This prints a readable AST where expression nodes are labeled, e.g.:
+
+```
+NODE_FUNCTION_DECL: foo (return type: int)
+   NODE_STATEMENT
+      NODE_ASSIGNMENT
+         NODE_EXPRESSION: x
+         NODE_BINARY_EXPR: &&
+            NODE_EXPRESSION: x
+            NODE_EXPRESSION: 7
+   NODE_STATEMENT
+      NODE_UNARY_OP: !
+         NODE_EXPRESSION: x
 ```
 
 ## 📖 Documentation
@@ -66,9 +88,18 @@ cmake --build . --target clean-all
 
 - Signal name collision for local variable 'result' in VHDL output ports (should be renamed to 'internal_result')
 - Global variables not yet implemented
-- Limited expression parsing (only identifiers and literals)
+- Logical operators are implemented as combinational boolean expressions; C short-circuit evaluation semantics are not modeled in hardware
 - No support for `while` and `for` control flow statements
 - VHDL codegen does not optimize for hardware resources or timing
+
+## ✅ Supported operators and semantics
+
+- Arithmetic: `+ - * /` are emitted as VHDL arithmetic on unsigned/signed as needed
+- Shifts: `<< >>` map to `shift_left/shift_right`
+- Bitwise: `& | ^` map to VHDL `and / or / xor` on `unsigned(...)`
+- Comparisons: `== != < <= > >=` map to VHDL comparisons; numeric literals/identifiers are cast using `to_unsigned/to_signed/unsigned(...)` as appropriate
+- Logical: `&& ||` are emitted as boolean `and/or` after booleanizing each operand as `(unsigned(expr) /= 0)` if not already boolean
+- Unary: `-x` (unary minus) and `!x` (logical not). `!x` becomes `not ( ... )` if boolean; otherwise `(unsigned(expr) = 0)`
 
 ## 🗺️ Roadmap
 

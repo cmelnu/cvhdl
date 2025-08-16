@@ -5,12 +5,18 @@ int add(int a, int b) {
 
 int nop() {
     int x;
-    x = 42;
+    x = x / 42;
     return -x;
 }
 
 int calculate_sum(double a, int b, int c) {
     int f = 5;
+    if (c == 0 || b == 5 && a != 10){
+        return f;
+    }
+    else if (!c){
+        f = 67;
+    }
     return -6;
 }
 

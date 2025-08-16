@@ -428,21 +428,36 @@ ASTNode* parse_statement(FILE *input) {
 
 
 static int get_precedence(const char *op) {
-    if (!op) return -1;
-    // Higher number = higher precedence
-    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 6;
-    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 5;
-    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 4;
-    // Bitwise ops higher than equality so (x ^ 0) == 0 parses as intended
-    if (strcmp(op, "&") == 0 || strcmp(op, "^") == 0 || strcmp(op, "|") == 0) return 3;
+    // Distinctly separate unknown/null from real operators
+    if (!op) return -999;
+    // Higher number = higher precedence (mirrors C precedence ordering)
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 7;
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 6;
+    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 5;
     if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
-        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 2;
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 1;
-    return -1;
+        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 4;
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 3;
+    if (strcmp(op, "&") == 0) return 2;
+    if (strcmp(op, "^") == 0) return 1;
+    if (strcmp(op, "|") == 0) return 0;
+    if (strcmp(op, "&&") == 0) return -1; // logical AND
+    if (strcmp(op, "||") == 0) return -2; // logical OR (lowest)
+    return -1000; // unknown
 }
 
 // Primary: identifiers, numbers, unary minus, and parentheses
 static ASTNode* parse_primary(FILE *input) {
+    // Unary logical NOT
+    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "!") == 0) {
+        advance(input);
+        ASTNode *inner = parse_primary(input);
+        if (!inner) return NULL;
+        ASTNode *node = create_node(NODE_BINARY_OP);
+        node->value = strdup("!");
+        add_child(node, inner);
+        return node;
+    }
+
     // Unary minus
     if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
         advance(input);
@@ -501,12 +516,12 @@ static ASTNode* parse_expression_prec(FILE *input, int min_prec) {
         if (prec < min_prec) break;
 
         // Capture operator and advance
-        char op_buf[4] = {0};
+    char op_buf[8] = {0};
         strncpy(op_buf, op, sizeof(op_buf) - 1);
         advance(input);
 
         // Parse right-hand side with higher minimum precedence (left-associative)
-        ASTNode *right = parse_expression_prec(input, prec + 1);
+    ASTNode *right = parse_expression_prec(input, prec + 1);
         if (!right) {
             printf("Error: Expected right operand after operator '%s'\n", op_buf);
             return left;
@@ -524,7 +539,8 @@ static ASTNode* parse_expression_prec(FILE *input, int min_prec) {
 
 // Replace the old parse_expression with precedence-aware version
 ASTNode* parse_expression(FILE *input) {
-    return parse_expression_prec(input, 1);
+    // Start from the lowest precedence we support so logical ops are parsed
+    return parse_expression_prec(input, -2);
 }
 
 // Generate VHDL code from an AST
@@ -682,6 +698,59 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             ASTNode *left = node->children[0];
             ASTNode *right = node->children[1];
 
+            // Logical AND/OR -> boolean expressions
+            if (strcmp(op, "&&") == 0 || strcmp(op, "||") == 0) {
+                // Helper lambdas (expanded inline) to emit boolean value of an expression
+                // If expr already boolean (comparison or logical), just emit it in parens
+                // Else, compare its unsigned value against zero
+                // Left side
+                int left_is_bool = 0;
+                if (left->type == NODE_BINARY_EXPR && left->value) {
+                    const char *lop = left->value;
+                    if (strcmp(lop, "==") == 0 || strcmp(lop, "!=") == 0 ||
+                        strcmp(lop, "<") == 0  || strcmp(lop, "<=") == 0 ||
+                        strcmp(lop, ">") == 0  || strcmp(lop, ">=") == 0 ||
+                        strcmp(lop, "&&") == 0 || strcmp(lop, "||") == 0) {
+                        left_is_bool = 1;
+                    }
+                }
+                int right_is_bool = 0;
+                if (right->type == NODE_BINARY_EXPR && right->value) {
+                    const char *rop = right->value;
+                    if (strcmp(rop, "==") == 0 || strcmp(rop, "!=") == 0 ||
+                        strcmp(rop, "<") == 0  || strcmp(rop, "<=") == 0 ||
+                        strcmp(rop, ">") == 0  || strcmp(rop, ">=") == 0 ||
+                        strcmp(rop, "&&") == 0 || strcmp(rop, "||") == 0) {
+                        right_is_bool = 1;
+                    }
+                }
+
+                fprintf(output, "(");
+                if (left_is_bool) {
+                    fprintf(output, "(");
+                    generate_vhdl(left, output);
+                    fprintf(output, ")");
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(left, output);
+                    fprintf(output, ") /= 0");
+                }
+
+                fprintf(output, "%s", strcmp(op, "&&") == 0 ? " and " : " or ");
+
+                if (right_is_bool) {
+                    fprintf(output, "(");
+                    generate_vhdl(right, output);
+                    fprintf(output, ")");
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(right, output);
+                    fprintf(output, ") /= 0");
+                }
+                fprintf(output, ")");
+                break;
+            }
+
             // Comparison operators
             if (strcmp(op, "=") == 0 || strcmp(op, "/=") == 0 ||
                 strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
@@ -774,16 +843,21 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             if (cond->type == NODE_BINARY_EXPR) {
                 // For comparisons, result is boolean already; for bitwise/arithmetic, compare against zero
                 const char *cop = cond->value;
-                int is_cmp = (strcmp(cop, "==") == 0 || strcmp(cop, "!=") == 0 ||
-                              strcmp(cop, "<") == 0 || strcmp(cop, "<=") == 0 ||
-                              strcmp(cop, ">") == 0 || strcmp(cop, ">=") == 0);
-                if (is_cmp) {
+                int is_bool = (strcmp(cop, "==") == 0 || strcmp(cop, "!=") == 0 ||
+                               strcmp(cop, "<") == 0 || strcmp(cop, "<=") == 0 ||
+                               strcmp(cop, ">") == 0 || strcmp(cop, ">=") == 0 ||
+                               strcmp(cop, "&&") == 0 || strcmp(cop, "||") == 0);
+                if (is_bool) {
                     generate_vhdl(cond, output);
                 } else {
                     fprintf(output, "unsigned(");
                     generate_vhdl(cond, output);
                     fprintf(output, ") /= 0");
                 }
+                fprintf(output, " then\n");
+            } else if (cond->type == NODE_BINARY_OP) {
+                // Unary logical '!' is a boolean expression
+                generate_vhdl(cond, output);
                 fprintf(output, " then\n");
             } else if (cond->type == NODE_EXPRESSION && cond->value) {
                 fprintf(output, "unsigned(%s) /= 0 then\n", cond->value);
@@ -797,6 +871,21 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     ASTNode *elseif_cond = branch->children[0];
                     fprintf(output, "      elsif ");
                     if (elseif_cond->type == NODE_BINARY_EXPR) {
+                        // As above, handle boolean vs numeric for elseif condition
+                        const char *ecop = elseif_cond->value;
+                        int elseif_is_bool = (strcmp(ecop, "==") == 0 || strcmp(ecop, "!=") == 0 ||
+                                              strcmp(ecop, "<") == 0 || strcmp(ecop, "<=") == 0 ||
+                                              strcmp(ecop, ">") == 0 || strcmp(ecop, ">=") == 0 ||
+                                              strcmp(ecop, "&&") == 0 || strcmp(ecop, "||") == 0);
+                        if (elseif_is_bool) {
+                            generate_vhdl(elseif_cond, output);
+                        } else {
+                            fprintf(output, "unsigned(");
+                            generate_vhdl(elseif_cond, output);
+                            fprintf(output, ") /= 0");
+                        }
+                        fprintf(output, " then\n");
+                    } else if (elseif_cond->type == NODE_BINARY_OP) {
                         generate_vhdl(elseif_cond, output);
                         fprintf(output, " then\n");
                     } else if (elseif_cond->type == NODE_EXPRESSION && elseif_cond->value) {
@@ -830,6 +919,37 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 }
             } else {
                 fprintf(output, "%s", node->value ? node->value : "unknown");
+            }
+            break;
+        }
+        case NODE_BINARY_OP: {
+            // Currently supports unary logical '!'
+            if (node->value && strcmp(node->value, "!") == 0 && node->num_children == 1) {
+                ASTNode *inner = node->children[0];
+                int inner_is_bool = 0;
+                if (inner->type == NODE_BINARY_EXPR && inner->value) {
+                    const char *iop = inner->value;
+                    if (strcmp(iop, "==") == 0 || strcmp(iop, "!=") == 0 ||
+                        strcmp(iop, "<") == 0  || strcmp(iop, "<=") == 0 ||
+                        strcmp(iop, ">") == 0  || strcmp(iop, ">=") == 0 ||
+                        strcmp(iop, "&&") == 0 || strcmp(iop, "||") == 0) {
+                        inner_is_bool = 1;
+                    }
+                } else if (inner->type == NODE_BINARY_OP && inner->value && strcmp(inner->value, "!") == 0) {
+                    inner_is_bool = 1; // not of boolean is boolean
+                }
+
+                if (inner_is_bool) {
+                    fprintf(output, "not (");
+                    generate_vhdl(inner, output);
+                    fprintf(output, ")");
+                } else {
+                    fprintf(output, "(unsigned(");
+                    generate_vhdl(inner, output);
+                    fprintf(output, ") = 0)");
+                }
+            } else {
+                fprintf(output, "-- unsupported unary op");
             }
             break;
         }
