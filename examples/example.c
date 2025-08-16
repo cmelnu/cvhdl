@@ -10,8 +10,13 @@ int nop() {
 }
 
 int calculate_sum(double a, int b, int c) {
+
+    double arr[3] = {1,2,3};
+    char word[4] = {'w', 'o', 'r', 'd'};
+    arr[2] = 6;
     int f = ~5;
     if (c == 0 || b == 5 && a != 10){
+        arr[3] = 78;
         return f;
     }
     else if (!c){

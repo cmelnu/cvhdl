@@ -7,18 +7,28 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 
 - 📝 Lexical analysis of C code (tokenizer)
 - 🏗️ Parsing of function declarations, parameter lists, variable declarations, assignments, return statements, and `if`/`else if`/`else` control flow
-- ➕ Expression parsing with proper precedence and associativity:
-   - Arithmetic: `+ - * /`
-   - Shifts: `<< >>`
-   - Bitwise: `& | ^`
-   - Comparisons: `== != < <= > >=`
-   - Logical: `&& ||` and unary `!`
-   - Unary minus: `-x`
-- 🌳 Abstract Syntax Tree (AST) construction with improved visualization (named nodes for binary/unary ops, if/else-if/else)
+-- ➕ Expression parsing with proper precedence and associativity:
+    - Arithmetic: `+ - * /`
+    - Shifts: `<< >>`
+    - Bitwise: `& | ^`
+    - Comparisons: `== != < <= > >=`
+    - Logical: `&& ||` and unary `!`
+    - Unary minus: `-x`
+- �️ Abstract Syntax Tree (AST) construction with improved visualization (named nodes for binary/unary ops, if/else-if/else)
 - 🛠️ Generation of VHDL entities and architecture skeletons
 - 🔄 Automatic type mapping between C types (`int`, `float`, `double`, `char`) and VHDL types
 - 🗂️ Example C files for testing in `examples/`
 - 📚 Sphinx documentation in `docs/` with Read the Docs theme
+- ✅ Array support:
+   - Parse and generate VHDL for C arrays of types `int`, `float`, `double`, and `char`
+   - Array declaration and initialization: `int arr[3] = {1,2,3};`, `float arr[2] = {1.0, 2.5};`, `char arr[4] = {'a','b','c','d'};`
+   - Array access and assignment: `arr[i] = x;`, `y = arr[j];`
+   - Type mapping:
+      - `int[]` → `std_logic_vector(31 downto 0)`
+      - `float[]`, `double[]` → `real`
+      - `char[]` → `character`
+   - Initializers are converted to valid VHDL literals for each type
+   - Array element access and assignment use VHDL syntax: `arr(i)`
 
 ## 🛠️ Installation
 
