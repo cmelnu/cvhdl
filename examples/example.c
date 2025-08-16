@@ -20,7 +20,7 @@ float multiply(float x, float y) {
 
 int square(int x) {
     double y = x + x;
-    if (x) {
+    if (x ^ 0 == 8) {
         y = x;
     } else if (-y + x > -0.25) {
         y = 1;

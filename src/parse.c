@@ -426,83 +426,108 @@ ASTNode* parse_statement(FILE *input) {
     return stmt_node;
 }
 
-// Parse a simple expression (currently only supports a single identifier or number)
-ASTNode* parse_expression(FILE *input) {
-    ASTNode *left = NULL;
-    ASTNode *right = NULL;
-    ASTNode *bin_expr = NULL;
+// Forward declarations
+static ASTNode* parse_expression_prec(FILE *input, int min_prec);
+static ASTNode* parse_primary(FILE *input);
 
-    // Handle unary minus for numbers and identifiers
-    int is_negative = 0;
+static int get_precedence(const char *op) {
+    if (!op) return -1;
+    // Higher number = higher precedence
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 6;
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 5;
+    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 4;
+    // Bitwise ops higher than equality so (x ^ 0) == 0 parses as intended
+    if (strcmp(op, "&") == 0 || strcmp(op, "^") == 0 || strcmp(op, "|") == 0) return 3;
+    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
+        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 2;
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 1;
+    return -1;
+}
+
+// Primary: identifiers, numbers, unary minus, and parentheses
+static ASTNode* parse_primary(FILE *input) {
+    // Unary minus
     if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
         advance(input);
-        is_negative = 1;
-    }
+        ASTNode *inner = parse_primary(input);
+        if (!inner) return NULL;
 
-    // Parse left operand (number or identifier)
-    if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
-        left = create_node(NODE_EXPRESSION);
-        if (is_negative) {
-            // Prepend '-' to the value for both numbers and identifiers
+        // Represent unary minus by storing "-<expr>" in a NODE_EXPRESSION where possible
+        if (inner->type == NODE_EXPRESSION && inner->value) {
             char buf[128];
-            snprintf(buf, sizeof(buf), "-%s", current_token.value);
-            left->value = strdup(buf);
+            snprintf(buf, sizeof(buf), "-%s", inner->value);
+            ASTNode *node = create_node(NODE_EXPRESSION);
+            node->value = strdup(buf);
+            free_node(inner);
+            return node;
         } else {
-            left->value = strdup(current_token.value);
+            // Fallback: build as binary 0 - inner
+            ASTNode *zero = create_node(NODE_EXPRESSION);
+            zero->value = strdup("0");
+            ASTNode *bin = create_node(NODE_BINARY_EXPR);
+            bin->value = strdup("-");
+            add_child(bin, zero);
+            add_child(bin, inner);
+            return bin;
         }
-        advance(input);
-    } else {
-        return NULL;
     }
 
-    // Parse chained binary operations (left-associative, no precedence)
-    while (match(TOKEN_OPERATOR) &&
-        (strcmp(current_token.value, "==") == 0 ||
-         strcmp(current_token.value, "!=") == 0 ||
-         strcmp(current_token.value, "<") == 0 ||
-         strcmp(current_token.value, "<=") == 0 ||
-         strcmp(current_token.value, ">") == 0 ||
-         strcmp(current_token.value, ">=") == 0 ||
-         strcmp(current_token.value, "+") == 0 ||
-         strcmp(current_token.value, "-") == 0 ||
-         strcmp(current_token.value, "*") == 0 ||
-         strcmp(current_token.value, "/") == 0)) {
+    // Parenthesized expression
+    if (match(TOKEN_PARENTHESIS_OPEN)) {
+        advance(input);
+        ASTNode *node = parse_expression_prec(input, 1);
+        if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+            printf("Error: Expected ')' in expression\n");
+        }
+        return node;
+    }
 
-        bin_expr = create_node(NODE_BINARY_EXPR);
-        bin_expr->value = strdup(current_token.value);
-        add_child(bin_expr, left);
+    // Identifier or number
+    if (match(TOKEN_IDENTIFIER) || match(TOKEN_NUMBER)) {
+        ASTNode *node = create_node(NODE_EXPRESSION);
+        node->value = strdup(current_token.value);
+        advance(input);
+        return node;
+    }
 
+    return NULL;
+}
+
+// Precedence-climbing parser
+static ASTNode* parse_expression_prec(FILE *input, int min_prec) {
+    ASTNode *left = parse_primary(input);
+    if (!left) return NULL;
+
+    while (match(TOKEN_OPERATOR)) {
+        const char *op = current_token.value;
+        int prec = get_precedence(op);
+        if (prec < min_prec) break;
+
+        // Capture operator and advance
+        char op_buf[4] = {0};
+        strncpy(op_buf, op, sizeof(op_buf) - 1);
         advance(input);
 
-        // Handle unary minus for right operand
-        int right_is_negative = 0;
-        if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
-            advance(input);
-            right_is_negative = 1;
+        // Parse right-hand side with higher minimum precedence (left-associative)
+        ASTNode *right = parse_expression_prec(input, prec + 1);
+        if (!right) {
+            printf("Error: Expected right operand after operator '%s'\n", op_buf);
+            return left;
         }
 
-        if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
-            right = create_node(NODE_EXPRESSION);
-            if (right_is_negative) {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "-%s", current_token.value);
-                right->value = strdup(buf);
-            } else {
-                right->value = strdup(current_token.value);
-            }
-            advance(input);
-        } else {
-            right = parse_expression(input);
-            if (!right) {
-                printf("Error: Expected right operand after binary operator\n");
-                return left;
-            }
-        }
-        add_child(bin_expr, right);
-        left = bin_expr;
+        ASTNode *bin = create_node(NODE_BINARY_EXPR);
+        bin->value = strdup(op_buf);
+        add_child(bin, left);
+        add_child(bin, right);
+        left = bin;
     }
 
     return left;
+}
+
+// Replace the old parse_expression with precedence-aware version
+ASTNode* parse_expression(FILE *input) {
+    return parse_expression_prec(input, 1);
 }
 
 // Generate VHDL code from an AST
@@ -636,38 +661,97 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             
         case NODE_BINARY_EXPR: {
             const char *op = node->value;
+            // Map C operators to VHDL
             if (strcmp(op, "==") == 0) op = "=";
             else if (strcmp(op, "!=") == 0) op = "/=";
 
-            // For comparison, wrap operands with unsigned() unless negative literal, then use to_signed()
+            ASTNode *left = node->children[0];
+            ASTNode *right = node->children[1];
+
+            // Comparison operators
             if (strcmp(op, "=") == 0 || strcmp(op, "/=") == 0 ||
                 strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
                 strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) {
-
                 // Left operand
-                ASTNode *left = node->children[0];
-                ASTNode *right = node->children[1];
-                if (left->type == NODE_EXPRESSION && is_negative_literal(left->value)) {
-                    fprintf(output, "to_signed(%s, 32)", left->value);
+                if (left->type == NODE_EXPRESSION) {
+                    if (is_negative_literal(left->value)) {
+                        fprintf(output, "to_signed(%s, 32)", left->value);
+                    } else {
+                        // If it's a non-negative number literal, convert to unsigned literal
+                        int is_num = 1; const char *p = left->value; if (!*p) is_num = 0; while (*p) { if (!isdigit(*p) && *p != '.') { is_num = 0; break; } p++; }
+                        if (is_num) {
+                            fprintf(output, "to_unsigned(%s, 32)", left->value);
+                        } else {
+                            fprintf(output, "unsigned(%s)", left->value);
+                        }
+                    }
                 } else {
+                    // Complex expression
                     fprintf(output, "unsigned(");
                     generate_vhdl(left, output);
                     fprintf(output, ")");
                 }
+
                 fprintf(output, " %s ", op);
+
                 // Right operand
-                if (right->type == NODE_EXPRESSION && is_negative_literal(right->value)) {
-                    fprintf(output, "to_signed(%s, 32)", right->value);
+                if (right->type == NODE_EXPRESSION) {
+                    if (is_negative_literal(right->value)) {
+                        fprintf(output, "to_signed(%s, 32)", right->value);
+                    } else {
+                        int is_num = 1; const char *p = right->value; if (!*p) is_num = 0; while (*p) { if (!isdigit(*p) && *p != '.') { is_num = 0; break; } p++; }
+                        if (is_num) {
+                            fprintf(output, "to_unsigned(%s, 32)", right->value);
+                        } else {
+                            fprintf(output, "unsigned(%s)", right->value);
+                        }
+                    }
                 } else {
                     fprintf(output, "unsigned(");
                     generate_vhdl(right, output);
                     fprintf(output, ")");
                 }
-            } else {
-                // Arithmetic: just output operands and operator
-                generate_vhdl(node->children[0], output);
+            }
+            // Bitwise AND, OR, XOR
+            else if (strcmp(op, "&") == 0) {
+                fprintf(output, "unsigned(");
+                generate_vhdl(left, output);
+                fprintf(output, ") and unsigned(");
+                generate_vhdl(right, output);
+                fprintf(output, ")");
+            } else if (strcmp(op, "|") == 0) {
+                fprintf(output, "unsigned(");
+                generate_vhdl(left, output);
+                fprintf(output, ") or unsigned(");
+                generate_vhdl(right, output);
+                fprintf(output, ")");
+            } else if (strcmp(op, "^") == 0) {
+                fprintf(output, "unsigned(");
+                generate_vhdl(left, output);
+                fprintf(output, ") xor unsigned(");
+                generate_vhdl(right, output);
+                fprintf(output, ")");
+            }
+            // Bitwise NOT (unary, handled elsewhere)
+            // Bitwise shift left/right
+            else if (strcmp(op, "<<") == 0) {
+                fprintf(output, "shift_left(unsigned(");
+                generate_vhdl(left, output);
+                fprintf(output, "), to_integer(unsigned(");
+                generate_vhdl(right, output);
+                fprintf(output, ")))");
+            } else if (strcmp(op, ">>") == 0) {
+                fprintf(output, "shift_right(unsigned(");
+                generate_vhdl(left, output);
+                fprintf(output, "), to_integer(unsigned(");
+                generate_vhdl(right, output);
+                fprintf(output, ")))");
+            }
+            // Arithmetic
+            else {
+                generate_vhdl(left, output);
                 fprintf(output, " %s ", op);
-                generate_vhdl(node->children[1], output);
+                generate_vhdl(right, output);
             }
             break;
         }
@@ -675,7 +759,18 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             ASTNode *cond = node->children[0];
             fprintf(output, "      if ");
             if (cond->type == NODE_BINARY_EXPR) {
-                generate_vhdl(cond, output);
+                // For comparisons, result is boolean already; for bitwise/arithmetic, compare against zero
+                const char *cop = cond->value;
+                int is_cmp = (strcmp(cop, "==") == 0 || strcmp(cop, "!=") == 0 ||
+                              strcmp(cop, "<") == 0 || strcmp(cop, "<=") == 0 ||
+                              strcmp(cop, ">") == 0 || strcmp(cop, ">=") == 0);
+                if (is_cmp) {
+                    generate_vhdl(cond, output);
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(cond, output);
+                    fprintf(output, ") /= 0");
+                }
                 fprintf(output, " then\n");
             } else if (cond->type == NODE_EXPRESSION && cond->value) {
                 fprintf(output, "unsigned(%s) /= 0 then\n", cond->value);
