@@ -10,106 +10,8 @@
 extern Token current_token;
 
 // Simple per-function array table for bounds checking
-typedef struct {
-    char name[64];
-    int size; // number of elements
-} ArrayInfo;
-static ArrayInfo g_arrays[128];
-static int g_array_count = 0;
-
-static void register_array(const char *name, int size) {
-    if (!name || size <= 0) return;
-    if (g_array_count >= (int)(sizeof(g_arrays) / sizeof(g_arrays[0]))) return;
-    // Prevent duplicates
-    for (int i = 0; i < g_array_count; i++) {
-        if (strcmp(g_arrays[i].name, name) == 0) { g_arrays[i].size = size; return; }
-    }
-    strncpy(g_arrays[g_array_count].name, name, sizeof(g_arrays[g_array_count].name) - 1);
-    g_arrays[g_array_count].name[sizeof(g_arrays[g_array_count].name) - 1] = '\0';
-    g_arrays[g_array_count].size = size;
-    g_array_count++;
-}
-
-static int find_array_size(const char *name) {
-    if (!name) return -1;
-    for (int i = 0; i < g_array_count; i++) {
-        if (strcmp(g_arrays[i].name, name) == 0) return g_arrays[i].size;
-    }
-    return -1;
-}
-
-static int is_number_str(const char *s) {
-    if (!s || !*s) return 0;
-    const char *p = s;
-    if (*p == '+' || *p == '-') p++;
-    if (!*p) return 0;
-    while (*p) { if (!isdigit((unsigned char)*p)) return 0; p++; }
-    return 1;
-}
-
-// Create a new AST node
-ASTNode* create_node(NodeType type) {
-
-    ASTNode *node = (ASTNode*)malloc(sizeof(ASTNode));
-
-    if (!node) {
-        perror("Failed to allocate memory for AST node");
-        exit(EXIT_FAILURE);
-    }
-    
-    node->type = type;
-    node->value = NULL;
-    node->parent = NULL;
-    node->children = NULL;
-    node->num_children = 0;
-    node->capacity = 0;
-    
-    return node;
-}
-
-
-// Free an AST node and all its children
-void free_node(ASTNode *node) {
-
-    if (!node) return;
-    
-    for (int i = 0; i < node->num_children; i++) {
-        free_node(node->children[i]);
-    }
-    
-    free(node->children);
-    free(node->value);
-    free(node);
-}
-
-
-// Add a child node
-void add_child(ASTNode *parent, ASTNode *child) {
-
-    if (!parent->children) {
-        parent->capacity = 4;  // Start with space for 4 children
-        parent->children = (ASTNode**)malloc(parent->capacity * sizeof(ASTNode*));
-        if (!parent->children) {
-            perror("Failed to allocate memory for child nodes");
-            exit(EXIT_FAILURE);
-        }
-    }
-    
-    if (parent->num_children >= parent->capacity) {
-        parent->capacity *= 2;
-        parent->children = (ASTNode**)realloc(parent->children, 
-                                             parent->capacity * sizeof(ASTNode*));
-        if (!parent->children) {
-            perror("Failed to reallocate memory for child nodes");
-            exit(EXIT_FAILURE);
-        }
-    }
-    
-    parent->children[parent->num_children++] = child;
-    child->parent = parent;
-}
-
-
+extern ArrayInfo g_arrays[128];
+extern int g_array_count;
 
 // Parse the entire program
 ASTNode* parse_program(FILE *input) {
@@ -567,26 +469,9 @@ ASTNode* parse_statement(FILE *input) {
 }
 
 
-static int get_precedence(const char *op) {
-    // Distinctly separate unknown/null from real operators
-    if (!op) return -999;
-    // Higher number = higher precedence (mirrors C precedence ordering)
-    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 7;
-    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 6;
-    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 5;
-    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
-        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 4;
-    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 3;
-    if (strcmp(op, "&") == 0) return 2;
-    if (strcmp(op, "^") == 0) return 1;
-    if (strcmp(op, "|") == 0) return 0;
-    if (strcmp(op, "&&") == 0) return -1; // logical AND
-    if (strcmp(op, "||") == 0) return -2; // logical OR (lowest)
-    return -1000; // unknown
-}
-
 // Primary: identifiers, numbers, unary minus, and parentheses
 static ASTNode* parse_primary(FILE *input) {
+
     // Unary logical NOT
     if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "!") == 0) {
         advance(input);
@@ -1257,22 +1142,4 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             break;
         }
     }
-}
-
-// Add this helper function above generate_vhdl:
-int is_negative_literal(const char* value) {
-    if (!value || value[0] != '-' || strlen(value) < 2)
-        return 0;
-    // Accept -123, -1.23, -0.5, -123.0, -y, -var, etc.
-    int i = 1;
-    int has_valid = 0;
-    while (value[i]) {
-        if (isdigit(value[i]) || value[i] == '.' || isalpha(value[i]) || value[i] == '_') {
-            has_valid = 1;
-        } else {
-            return 0;
-        }
-        i++;
-    }
-    return has_valid;
 }

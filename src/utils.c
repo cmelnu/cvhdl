@@ -1,12 +1,81 @@
 #include "utils.h"
 
+ArrayInfo g_arrays[128];
+int g_array_count = 0;
 
 // Helper function to print tree branches for AST visualization
-static void print_tree_prefix(int level, int is_last) {
+void print_tree_prefix(int level, int is_last) {
     for (int i = 0; i < level; i++) {
         printf("%s", (i == level - 1) ? (is_last ? "└── " : "├── ") : "    ");
     }
 }
+
+int find_array_size(const char *name) {
+    if (!name) return -1;
+    for (int i = 0; i < g_array_count; i++) {
+        if (strcmp(g_arrays[i].name, name) == 0) return g_arrays[i].size;
+    }
+    return -1;
+}
+
+void register_array(const char *name, int size) {
+    if (!name || size <= 0) return;
+    if (g_array_count >= (int)(sizeof(g_arrays) / sizeof(g_arrays[0]))) return;
+    // Prevent duplicates
+    for (int i = 0; i < g_array_count; i++) {
+        if (strcmp(g_arrays[i].name, name) == 0) { g_arrays[i].size = size; return; }
+    }
+    strncpy(g_arrays[g_array_count].name, name, sizeof(g_arrays[g_array_count].name) - 1);
+    g_arrays[g_array_count].name[sizeof(g_arrays[g_array_count].name) - 1] = '\0';
+    g_arrays[g_array_count].size = size;
+    g_array_count++;
+}
+
+int is_number_str(const char *s) {
+    if (!s || !*s) return 0;
+    const char *p = s;
+    if (*p == '+' || *p == '-') p++;
+    if (!*p) return 0;
+    while (*p) { if (!isdigit((unsigned char)*p)) return 0; p++; }
+    return 1;
+}
+
+// Add this helper function above generate_vhdl:
+int is_negative_literal(const char* value) {
+    if (!value || value[0] != '-' || strlen(value) < 2)
+        return 0;
+    // Accept -123, -1.23, -0.5, -123.0, -y, -var, etc.
+    int i = 1;
+    int has_valid = 0;
+    while (value[i]) {
+        if (isdigit(value[i]) || value[i] == '.' || isalpha(value[i]) || value[i] == '_') {
+            has_valid = 1;
+        } else {
+            return 0;
+        }
+        i++;
+    }
+    return has_valid;
+}
+
+int get_precedence(const char *op) {
+    // Distinctly separate unknown/null from real operators
+    if (!op) return -999;
+    // Higher number = higher precedence (mirrors C precedence ordering)
+    if (strcmp(op, "*") == 0 || strcmp(op, "/") == 0) return 7;
+    if (strcmp(op, "+") == 0 || strcmp(op, "-") == 0) return 6;
+    if (strcmp(op, "<<") == 0 || strcmp(op, ">>") == 0) return 5;
+    if (strcmp(op, "<") == 0 || strcmp(op, "<=") == 0 ||
+        strcmp(op, ">") == 0 || strcmp(op, ">=") == 0) return 4;
+    if (strcmp(op, "==") == 0 || strcmp(op, "!=") == 0) return 3;
+    if (strcmp(op, "&") == 0) return 2;
+    if (strcmp(op, "^") == 0) return 1;
+    if (strcmp(op, "|") == 0) return 0;
+    if (strcmp(op, "&&") == 0) return -1; // logical AND
+    if (strcmp(op, "||") == 0) return -2; // logical OR (lowest)
+    return -1000; // unknown
+}
+
 
 // Print the AST recursively in a readable tree format
 void print_ast(ASTNode* node, int level) {
