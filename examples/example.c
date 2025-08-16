@@ -1,21 +1,21 @@
 int add(int a, int b) {
     int sum = 6;
-    return sum;
+    return sum+6+7 == 6;
 }
 
 int nop() {
     int x;
     x = 42;
-    return x;
+    return -x;
 }
 
 int calculate_sum(double a, int b, int c) {
     int f = 5;
-    return f;
+    return -6;
 }
 
-float multiply(float x, float y) {
-    return y;
+int bitwise(int x, int y) {
+    return x^y;
 }
 
 int square(int x) {

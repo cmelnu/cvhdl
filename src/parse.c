@@ -651,9 +651,26 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 if (child->type == NODE_IF_STATEMENT) {
                     generate_vhdl(child, output);
                 }
-                // Handle direct expression as return value
+                // Handle return value: support arithmetic, unary, direct values, bitwise, and comparison expressions
                 if (child->type == NODE_EXPRESSION) {
-                    fprintf(output, "      result <= %s;\n", child->value ? child->value : "std_logic_vector(to_unsigned(0, 32))");
+                    fprintf(output, "      result <= ");
+                    if (child->value && child->value[0] == '-' && strlen(child->value) > 1) {
+                        // If it's a negative identifier (e.g., -y)
+                        if (isalpha(child->value[1]) || child->value[1] == '_') {
+                            fprintf(output, "-unsigned(%s)", child->value + 1);
+                        } else {
+                            // Negative number (int or float)
+                            fprintf(output, "to_signed(%s, 32)", child->value);
+                        }
+                    } else {
+                        generate_vhdl(child, output);
+                    }
+                    fprintf(output, ";\n");
+                }
+                if (child->type == NODE_BINARY_EXPR) {
+                    fprintf(output, "      result <= ");
+                    generate_vhdl(child, output);
+                    fprintf(output, ";\n");
                 }
             }
             break;
@@ -732,7 +749,6 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 generate_vhdl(right, output);
                 fprintf(output, ")");
             }
-            // Bitwise NOT (unary, handled elsewhere)
             // Bitwise shift left/right
             else if (strcmp(op, "<<") == 0) {
                 fprintf(output, "shift_left(unsigned(");

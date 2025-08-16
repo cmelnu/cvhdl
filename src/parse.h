@@ -48,4 +48,7 @@ void print_ast(ASTNode* node, int level);
 // Helper for VHDL codegen
 int is_negative_literal(const char* value);
 
+// Helper for type mapping
+const char* ctype_to_vhdl(const char* ctype);
+
 #endif
