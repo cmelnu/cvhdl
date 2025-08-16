@@ -10,14 +10,14 @@ int nop() {
 }
 
 int calculate_sum(double a, int b, int c) {
-    int f = 5;
+    int f = ~5;
     if (c == 0 || b == 5 && a != 10){
         return f;
     }
     else if (!c){
-        f = 67;
+        f = ~67;
     }
-    return -6;
+    return ~6;
 }
 
 int bitwise(int x, int y) {

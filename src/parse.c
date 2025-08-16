@@ -457,6 +457,16 @@ static ASTNode* parse_primary(FILE *input) {
         add_child(node, inner);
         return node;
     }
+    // Unary bitwise NOT
+    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "~") == 0) {
+        advance(input);
+        ASTNode *inner = parse_primary(input);
+        if (!inner) return NULL;
+        ASTNode *node = create_node(NODE_BINARY_OP);
+        node->value = strdup("~");
+        add_child(node, inner);
+        return node;
+    }
 
     // Unary minus
     if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "-") == 0) {
@@ -681,6 +691,11 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     fprintf(output, ";\n");
                 }
                 if (child->type == NODE_BINARY_EXPR) {
+                    fprintf(output, "      result <= ");
+                    generate_vhdl(child, output);
+                    fprintf(output, ";\n");
+                }
+                if (child->type == NODE_BINARY_OP) {
                     fprintf(output, "      result <= ");
                     generate_vhdl(child, output);
                     fprintf(output, ";\n");
@@ -923,7 +938,7 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             break;
         }
         case NODE_BINARY_OP: {
-            // Currently supports unary logical '!'
+            // Unary logical '!'
             if (node->value && strcmp(node->value, "!") == 0 && node->num_children == 1) {
                 ASTNode *inner = node->children[0];
                 int inner_is_bool = 0;
@@ -948,7 +963,15 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     generate_vhdl(inner, output);
                     fprintf(output, ") = 0)");
                 }
-            } else {
+            }
+            // Unary bitwise '~'
+            else if (node->value && strcmp(node->value, "~") == 0 && node->num_children == 1) {
+                ASTNode *inner = node->children[0];
+                fprintf(output, "not unsigned(");
+                generate_vhdl(inner, output);
+                fprintf(output, ")");
+            }
+            else {
                 fprintf(output, "-- unsupported unary op");
             }
             break;
