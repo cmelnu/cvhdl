@@ -26,7 +26,10 @@ ASTNode* parse_program(FILE *input) {
     advance(input); // Ensure this is present
 
     while (!match(TOKEN_EOF)) {
+        
+        #ifdef DEBUG
         printf("Parsing token: type=%d, value='%s'\n", current_token.type, current_token.value ? current_token.value : "");
+        #endif
         // Check for function declaration
         if (match(TOKEN_KEYWORD)) {
 
@@ -44,7 +47,9 @@ ASTNode* parse_program(FILE *input) {
                     // Don't rewind the file - this causes problems
                     func_node = parse_function(input, return_type, func_name);
                     if (func_node != NULL) {
+                        #ifdef DEBUG
                         printf("Parsed function: %s\n", func_node->value); // Debug print
+                        #endif
                         add_child(program_node, func_node);
                     }
                 } else {
@@ -168,7 +173,7 @@ ASTNode* parse_statement(FILE *input) {
     ASTNode *init_expr = NULL;
     ASTNode *return_expr = NULL;
     ASTNode *assign_node = NULL;
-    ASTNode *lhs_node = NULL;
+    // removed unused lhs_node
     ASTNode *rhs_node = NULL;
     Token type_token;
     Token name_token;
@@ -198,14 +203,14 @@ ASTNode* parse_statement(FILE *input) {
 
             // Array declaration: int arr[10];
             int is_array = 0;
-            char arr_size_buf[32] = {0};
+            char arr_size_buf[256] = {0};
         if (match(TOKEN_BRACKET_OPEN)) {
                 is_array = 1;
                 advance(input);
                 if (match(TOKEN_NUMBER)) {
                     snprintf(arr_size_buf, sizeof(arr_size_buf), "%s", current_token.value);
                     // Store array size in value as "name[size]"
-                    char buf[128];
+                    char buf[1024];
                     snprintf(buf, sizeof(buf), "%s[%s]", name_token.value, current_token.value);
                     free(var_decl_node->value);
                     var_decl_node->value = strdup(buf);
@@ -307,7 +312,7 @@ ASTNode* parse_statement(FILE *input) {
                 exit(EXIT_FAILURE);
             }
             lhs_expr = create_node(NODE_EXPRESSION);
-            char buf[700];
+            char buf[1024];
             snprintf(buf, sizeof(buf), "%s[%s]", lhs_token.value, idx_buf);
             lhs_expr->value = strdup(buf);
             // Static bounds check for numeric literal index
@@ -551,7 +556,7 @@ ASTNode* parse_statement(FILE *input) {
 
 
 // Primary: identifiers, numbers, unary minus, and parentheses
-static ASTNode* parse_primary(FILE *input) {
+ASTNode* parse_primary(FILE *input) {
 
     // Unary logical NOT
     if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "!") == 0) {
@@ -676,7 +681,7 @@ static ASTNode* parse_primary(FILE *input) {
 }
 
 // Precedence-climbing parser
-static ASTNode* parse_expression_prec(FILE *input, int min_prec) {
+ASTNode* parse_expression_prec(FILE *input, int min_prec) {
     ASTNode *left = parse_primary(input);
     if (!left) return NULL;
 
@@ -1267,6 +1272,10 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             else {
                 fprintf(output, "-- unsupported unary op");
             }
+            break;
+        }
+        default: {
+            // Unhandled node types either don't emit VHDL directly or are covered elsewhere
             break;
         }
     }

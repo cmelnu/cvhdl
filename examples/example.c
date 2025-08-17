@@ -51,22 +51,24 @@ void set_flag(int flag) {
     flag = 1;
 }
 
-int while_loop(int limit) {
+int while_nested_loop(int outer_limit, int inner_limit) {
     int i = 0;
-    int sum = 0;
-    while (i < limit) {
-        if (i == 3) {
-            // Skip 3
-            i = i + 1;
-            continue;
-        } else if (i > 10) {
-            // Stop early if i grows too large
-            break;
-        } else {
-            sum = sum + i;
+    int total = 0;
+    while (i < outer_limit) {
+        int j = 0;
+        while (j < inner_limit) {
+            if (j == 2) {
+                j = j + 1;
+                continue;
+            }
+            if (i + j > 10) {
+                break;
+            }
+            total = total + i + j;
+            j = j + 1;
         }
         i = i + 1;
     }
-    return sum;
+    return total;
 }
 

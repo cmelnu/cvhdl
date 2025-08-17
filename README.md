@@ -31,6 +31,10 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
       - `char[]` → `character`
    - Initializers are converted to valid VHDL literals for each type
    - Array element access and assignment use VHDL syntax: `arr(i)`
+- 🔁 **While loop, break, and continue support**
+   - Parse and generate VHDL for `while (<expr>) { ... }` loops
+   - Support for `break;` and `continue;` statements inside loops, including inside `if`, `else if`, and `else` blocks within loops
+   - VHDL codegen emits `exit;` for `break` and `next;` for `continue`
 
 ## 🛠️ Installation
 
@@ -49,27 +53,17 @@ make
 ./compi input.c output.vhdl
 ```
 
+**Developer Debug Output:**
 
-### Debugging & Error Reporting
+To enable verbose debug output for developers, configure the build with the `-DDEBUG=ON` argument:
 
-**Debug mode (-d):**
-
-Print the AST for debugging:
 ```bash
-./compi -d input.c output.vhdl
+cmake -DDEBUG=ON ..
+make
 ```
 
-This prints a readable AST tree with labeled nodes and branches, making it easier to understand the structure of parsed code and debug issues.
+This will provide additional debug prints and diagnostics during parsing and code generation.
 
-**Improved error diagnostics:**
-
-When a parsing error occurs, the compiler now reports the exact line number in the source file where the error was detected. For example:
-
-```
-Error (line 15): Expected ';' after variable declaration
-```
-
-This helps quickly locate and fix syntax errors in your C source files.
 
 ## 📖 Documentation
 
@@ -78,13 +72,6 @@ To build the docs:
 ```bash
 cmake --build . --target docs
 "$BROWSER" docs/build/html/index.html
-```
-
-## 🧹 Cleaning
-
-To remove build artifacts and documentation output:
-```bash
-cmake --build . --target clean-all
 ```
 
 ## 🗂️ Project Structure
@@ -101,7 +88,6 @@ cmake --build . --target clean-all
 - Signal name collision for local variable 'result' in VHDL output ports (should be renamed to 'internal_result')
 - Global variables not yet implemented
 - Logical operators are implemented as combinational boolean expressions; C short-circuit evaluation semantics are not modeled in hardware
-- No support for `while` and `for` control flow statements
 - VHDL codegen does not optimize for hardware resources or timing
 
 ## ✅ Supported operators and semantics
@@ -112,6 +98,7 @@ cmake --build . --target clean-all
 - Comparisons: `== != < <= > >=` map to VHDL comparisons; numeric literals/identifiers are cast using `to_unsigned/to_signed/unsigned(...)` as appropriate
 - Logical: `&& ||` are emitted as boolean `and/or` after booleanizing each operand as `(unsigned(expr) /= 0)` if not already boolean
 - Unary: `-x` (unary minus) and `!x` (logical not). `!x` becomes `not ( ... )` if boolean; otherwise `(unsigned(expr) = 0)`
+- Control flow: `while` loops, `break`, and `continue` statements are supported and mapped to VHDL loop constructs
 
 ## 🗺️ Roadmap
 
@@ -126,37 +113,31 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 - Parsing and code generation for `if`, `else if`, and `else` statements
 - Support for unary minus and negative literals/identifiers in expressions
 - Basic VHDL code generation with type mapping
+- Parsing and code generation for `while` loops, `break`, and `continue` statements
 
 ### 🚧 Roadmap
 
-1. **Expression Parsing Improvements**
-   - Support binary operations (e.g., `a + b`, `x * 2`)
-   - Handle operator precedence and parentheses
+1. **Control Flow Statements**
+   - Next: Add support for `for` loops
 
-2. **Control Flow Statements**
-   - Parse and represent `while` and `for` statements in the AST
-   - Generate VHDL comments or skeletons for control flow
-
-3. **Global Variable Support**
+2. **Global Variable Support**
    - Parse and represent global variable declarations
    - Generate VHDL for global signals
 
-4. **Function Calls**
+3. **Function Calls**
    - Parse function calls within expressions and statements
    - Inline or generate VHDL for simple calls
 
-5. **Error Handling & Diagnostics**
+4. **Error Handling & Diagnostics**
    - Improve error messages and diagnostics for unsupported constructs
 
-6. **VHDL Codegen Enhancements**
+5. **VHDL Codegen Enhancements**
    - Optimize generated VHDL for hardware resources and timing
    - Handle signal name collisions (e.g., local `result`)
 
-7. **Documentation & Examples**
+6. **Documentation & Examples**
    - Expand Sphinx documentation with module, function, and data structure details
    - Add more example C files and expected VHDL outputs
 
----
-
-Contributions and feedback are welcome!  
-Join the discussion and development at [GitHub - cmelnu/compi](https://github.com/cmelnu/compi)
+7. **Code Cleanup and Restructuring**
+   - Ensure clean code, improve maintainability, and refactor as needed

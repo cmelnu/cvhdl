@@ -3,26 +3,29 @@ Architecture
 
 The compiler is structured as a pipeline:
 
-1. **Lexical Analysis (token.c)**
-	- Reads the input C file and produces a stream of tokens.
-	- Handles keywords, identifiers, literals, operators, and comments.
+1. **Lexical Analysis (token.c / token.h)**
+    - Reads the input C file and produces a stream of tokens.
+    - Handles keywords, identifiers, literals, operators, and comments.
 
-2. **Parsing (parse.c, parse.h)**
-	- Consumes the token stream and builds an Abstract Syntax Tree (AST).
-	- Supports function declarations, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`).
-	- Handles binary and unary expressions, including negative literals and identifiers.
+2. **Parsing (parse.c / parse.h)**
+    - Consumes the token stream and builds an Abstract Syntax Tree (AST).
+    - Supports function declarations, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`, `while`, `break`, `continue`).
+    - Handles binary and unary expressions, including negative literals and identifiers.
+    - Supports nested while loops and correct handling of break/continue at any loop depth.
 
-3. **AST Representation (parse.h)**
-	- Defines node types for all supported C constructs.
-	- Supports nested expressions and statement blocks.
+3. **AST Representation (astnode.c / astnode.h)**
+    - Defines node types for all supported C constructs.
+    - Provides data structures and functions for creating, freeing, and manipulating AST nodes.
+    - Supports nested expressions and statement blocks.
 
 4. **VHDL Code Generation (compi.c, parse.c)**
-	- Traverses the AST and emits VHDL code.
-	- Maps C types to VHDL types, handles signal declarations, assignments, and control flow.
-	- Handles negative values and binary expressions correctly in VHDL.
+    - Traverses the AST and emits VHDL code.
+    - Maps C types to VHDL types, handles signal declarations, assignments, and control flow.
+    - Handles negative values and binary expressions correctly in VHDL.
+    - Generates VHDL for while loops, including nested loops, break, and continue statements.
 
-5. **Utilities (utils.c, utils.h)**
-	- Provides string manipulation, error handling, and memory management.
+5. **Utilities (utils.c / utils.h)**
+    - Provides string manipulation, error handling, memory management, type mapping, and AST printing.
 
 The modular design allows for easy extension to new C constructs and VHDL features.
 
@@ -33,18 +36,21 @@ The compiler is organized into modular components for tokenization, parsing, AST
 Main Components
 ---------------
 - **Tokenizer**: Scans C source code and produces tokens for keywords, identifiers, numbers, operators, and punctuation.
-- **Parser**: Uses recursive descent to build an AST representing the structure of the C code.
-- **AST**: Abstract Syntax Tree nodes represent functions, variables, assignments, and return statements.
-- **Code Generator**: Traverses the AST to produce VHDL code, mapping C types to VHDL types and handling signal/port declarations.
+- **Parser**: Uses recursive descent to build an AST representing the structure of the C code, including support for nested while loops and control flow.
+- **AST**: Abstract Syntax Tree nodes represent functions, variables, assignments, return statements, and control flow constructs.
+- **Code Generator**: Traverses the AST to produce VHDL code, mapping C types to VHDL types and handling signal/port declarations, while loops, break, and continue.
 
 Data Flow
 ---------
 1. Input C file is tokenized.
 2. Tokens are parsed into an AST.
-3. AST is printed for debugging (optional).
-4. VHDL code is generated from the AST.
+3. VHDL code is generated from the AST.
 
 Extensibility
 -------------
 - New C constructs can be supported by adding AST node types and parser logic.
 - VHDL codegen can be expanded for more complex hardware descriptions.
+
+Developer Debug Output
+---------------------
+- Enable verbose debug output for developers by configuring the build with the `-DDEBUG=ON` argument in CMake. This provides additional debug prints and diagnostics during parsing and code generation.
