@@ -131,6 +131,15 @@ void print_ast(ASTNode* node, int level) {
         case NODE_ELSE_STATEMENT:
             printf("ELSE\n");
             break;
+        case NODE_WHILE_STATEMENT:
+            printf("WHILE\n");
+            break;
+        case NODE_BREAK_STATEMENT:
+            printf("BREAK\n");
+            break;
+        case NODE_CONTINUE_STATEMENT:
+            printf("CONTINUE\n");
+            break;
         default:
             printf("NODE_TYPE_%d\n", node->type);
             break;

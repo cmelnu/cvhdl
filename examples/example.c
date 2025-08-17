@@ -50,3 +50,23 @@ double mix(int a, float b, double c) {
 void set_flag(int flag) {
     flag = 1;
 }
+
+int while_loop(int limit) {
+    int i = 0;
+    int sum = 0;
+    while (i < limit) {
+        if (i == 3) {
+            // Skip 3
+            i = i + 1;
+            continue;
+        } else if (i > 10) {
+            // Stop early if i grows too large
+            break;
+        } else {
+            sum = sum + i;
+        }
+        i = i + 1;
+    }
+    return sum;
+}
+

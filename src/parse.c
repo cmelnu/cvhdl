@@ -13,6 +13,9 @@ extern Token current_token;
 extern ArrayInfo g_arrays[128];
 extern int g_array_count;
 
+// Track loop depth to validate break/continue usage
+static int s_loop_depth = 0;
+
 // Parse the entire program
 ASTNode* parse_program(FILE *input) {
 
@@ -458,6 +461,84 @@ ASTNode* parse_statement(FILE *input) {
         return stmt_node;
     }
 
+    // Parse while loop: while (<expr>) { ... }
+    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "while") == 0) {
+        advance(input);
+
+        // Expect '('
+        if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+            printf("Error (line %d): Expected '(' after 'while'\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        // Parse condition expression
+        ASTNode *cond_expr = parse_expression(input);
+
+        if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+            printf("Error (line %d): Expected ')' after while condition\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        // Expect '{'
+        if (!consume(input, TOKEN_BRACE_OPEN)) {
+            printf("Error (line %d): Expected '{' after while condition\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        ASTNode *while_node = create_node(NODE_WHILE_STATEMENT);
+        if (cond_expr) add_child(while_node, cond_expr);
+
+        // Parse statements inside while block
+        s_loop_depth++;
+        while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+            ASTNode *inner_stmt = parse_statement(input);
+            if (inner_stmt) add_child(while_node, inner_stmt);
+        }
+        s_loop_depth--;
+
+        if (!consume(input, TOKEN_BRACE_CLOSE)) {
+            printf("Error (line %d): Expected '}' after while block\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        add_child(stmt_node, while_node);
+        return stmt_node;
+    }
+
+    // Parse break statement: break;
+    if ((match(TOKEN_KEYWORD) && strcmp(current_token.value, "break") == 0) ||
+        (match(TOKEN_IDENTIFIER) && strcmp(current_token.value, "break") == 0)) {
+        if (s_loop_depth <= 0) {
+            printf("Error (line %d): 'break' not within a loop\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+        advance(input);
+        if (!consume(input, TOKEN_SEMICOLON)) {
+            printf("Error (line %d): Expected ';' after 'break'\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+        ASTNode *br = create_node(NODE_BREAK_STATEMENT);
+        add_child(stmt_node, br);
+        return stmt_node;
+    }
+
+    // Parse continue statement: continue;
+    if ((match(TOKEN_KEYWORD) && strcmp(current_token.value, "continue") == 0) ||
+        (match(TOKEN_IDENTIFIER) && strcmp(current_token.value, "continue") == 0)) {
+        if (s_loop_depth <= 0) {
+            printf("Error (line %d): 'continue' not within a loop\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+        advance(input);
+        if (!consume(input, TOKEN_SEMICOLON)) {
+            printf("Error (line %d): Expected ';' after 'continue'\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+        ASTNode *cn = create_node(NODE_CONTINUE_STATEMENT);
+        add_child(stmt_node, cn);
+        return stmt_node;
+    }
+
     // TODO: Add parsing for while, etc.
 
     // Skip unknown statement (consume until semicolon or brace)
@@ -822,6 +903,14 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 if (child->type == NODE_IF_STATEMENT) {
                     generate_vhdl(child, output);
                 }
+                // While loop VHDL generation
+                if (child->type == NODE_WHILE_STATEMENT) {
+                    generate_vhdl(child, output);
+                }
+                // Break / Continue inside loops
+                if (child->type == NODE_BREAK_STATEMENT || child->type == NODE_CONTINUE_STATEMENT) {
+                    generate_vhdl(child, output);
+                }
                 // Handle return value: support arithmetic, unary, direct values, bitwise, and comparison expressions
                 if (child->type == NODE_EXPRESSION) {
                     fprintf(output, "      result <= ");
@@ -849,6 +938,45 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     fprintf(output, ";\n");
                 }
             }
+            break;
+        }
+        case NODE_WHILE_STATEMENT: {
+            ASTNode *cond = node->children[0];
+            fprintf(output, "      while ");
+            if (cond->type == NODE_BINARY_EXPR) {
+                // For comparisons/logicals, already boolean; otherwise compare != 0
+                const char *cop = cond->value;
+                int is_bool = (strcmp(cop, "==") == 0 || strcmp(cop, "!=") == 0 ||
+                               strcmp(cop, "<") == 0 || strcmp(cop, "<=") == 0 ||
+                               strcmp(cop, ">") == 0 || strcmp(cop, ">=") == 0 ||
+                               strcmp(cop, "&&") == 0 || strcmp(cop, "||") == 0);
+                if (is_bool) {
+                    generate_vhdl(cond, output);
+                } else {
+                    fprintf(output, "unsigned(");
+                    generate_vhdl(cond, output);
+                    fprintf(output, ") /= 0");
+                }
+            } else if (cond->type == NODE_BINARY_OP) {
+                generate_vhdl(cond, output);
+            } else if (cond->type == NODE_EXPRESSION && cond->value) {
+                fprintf(output, "unsigned(%s) /= 0", cond->value);
+            } else {
+                fprintf(output, "(%s)", cond->value ? cond->value : "false");
+            }
+            fprintf(output, " loop\n");
+            for (int j = 1; j < node->num_children; j++) {
+                generate_vhdl(node->children[j], output);
+            }
+            fprintf(output, "      end loop;\n");
+            break;
+        }
+        case NODE_BREAK_STATEMENT: {
+            fprintf(output, "      exit;\n");
+            break;
+        }
+        case NODE_CONTINUE_STATEMENT: {
+            fprintf(output, "      next;\n");
             break;
         }
             
