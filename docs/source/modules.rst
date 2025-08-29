@@ -54,3 +54,17 @@ CMakeLists.txt
 --------------
 Build configuration for compiling all source files. Supports enabling developer debug output via `-DDEBUG=ON`.
 
+tests/
+------
+Contains GoogleTest-based C++ unit tests. The build creates a reusable
+``compi_core`` library (all C sources except the CLI front-end) so tests
+link cleanly without invoking the command-line interface. Tests are
+auto-discovered with ``gtest_discover_tests`` enabling each test case to
+appear individually in CTest output.
+
+run_tests.sh
+------------
+Helper script to configure (if needed), build, and run the full test suite
+with a single command.
+
+

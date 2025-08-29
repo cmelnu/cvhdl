@@ -27,6 +27,10 @@ The compiler is structured as a pipeline:
 5. **Utilities (utils.c / utils.h)**
     - Provides string manipulation, error handling, memory management, type mapping, and AST printing.
 
+6. **Testing (tests/*.cpp)**
+    - GoogleTest unit tests covering AST construction, utilities (precedence, numeric detection), lexer tokenization, and control-flow scaffolding.
+    - Each test is discovered individually via ``gtest_discover_tests`` allowing granular execution (e.g. regex filtering) through CTest or direct GoogleTest filters.
+
 The modular design allows for easy extension to new C constructs and VHDL features.
 
 Overview
@@ -52,5 +56,16 @@ Extensibility
 - VHDL codegen can be expanded for more complex hardware descriptions.
 
 Developer Debug Output
----------------------
+----------------------
 - Enable verbose debug output for developers by configuring the build with the `-DDEBUG=ON` argument in CMake. This provides additional debug prints and diagnostics during parsing and code generation.
+
+Testing Workflow
+----------------
+
+1. Configure with ``-DENABLE_TESTING=ON`` (default).
+2. Build and run tests: ``cmake --build build --target test_all``.
+3. Inspect or filter tests: ``ctest -N`` / ``ctest -R <regex>``.
+4. Use direct filtering: ``./build/compi_tests --gtest_filter=TokenTests.*``.
+
+Planned additions include integration (golden) tests for VHDL output and coverage reporting.
+

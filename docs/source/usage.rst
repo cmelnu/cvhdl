@@ -17,7 +17,7 @@ Error messages include the exact line number in the source file where the error 
 See the `examples/` folder for sample input files.
 
 Developer Debug Output
----------------------
+----------------------
 
 To enable verbose debug output for developers, configure the build with the -DDEBUG=ON argument:
 
@@ -27,3 +27,25 @@ To enable verbose debug output for developers, configure the build with the -DDE
    make
 
 This will provide additional debug prints and diagnostics during parsing and code generation.
+
+Testing Quick Reference
+-----------------------
+
+Unit tests use GoogleTest and are auto-discovered. Common commands:
+
+.. code-block:: bash
+
+   # Build + run everything
+   cmake --build build --target test_all -j 4
+
+   # List available tests
+   ctest --test-dir build -N
+
+   # Run subset by regex
+   ctest --test-dir build -R UtilsTests
+
+   # Run single test directly
+   ./build/compi_tests --gtest_filter=TokenTests.BasicLexing
+
+See :doc:`testing` for full details.
+

@@ -85,6 +85,48 @@ make
 
 This will provide additional debug prints and diagnostics during parsing and code generation.
 
+## 🧪 Testing
+
+GoogleTest is integrated. Each individual test case is auto-discovered (via `gtest_discover_tests`) so CTest shows every `TEST()` separately.
+
+### Quick start
+```bash
+# Configure (with tests enabled by default) and build
+cmake -S . -B build -DENABLE_TESTING=ON
+cmake --build build --target test_all -j 4
+
+# Or use the helper script (configures if needed, builds, runs tests)
+./run_tests.sh
+```
+
+### Running tests
+```bash
+# Run all tests with verbose failure output
+ctest --test-dir build --output-on-failure
+
+# List (discover) tests without running
+ctest --test-dir build -N
+
+# Run a subset by regex (CTest layer)
+ctest --test-dir build -R UtilsTests
+
+# Run a single GoogleTest directly with filter (bypassing CTest)
+./build/compi_tests --gtest_filter=TokenTests.BasicLexing
+```
+
+### Convenience targets
+```bash
+cmake --build build --target test_all   # builds compi_tests then runs ctest
+cmake --build build --target docs       # builds Sphinx docs
+```
+
+### Adding new tests
+Add a new `*.cpp` file (or new `TEST` blocks) in `tests/`. Rebuild; CMake re-discovers them automatically—no need to edit `CMakeLists.txt`.
+
+### Notes
+* Internal globals (`g_array_count`, `current_token`) are touched by some tests; future refactoring may wrap them in a fixture for stricter isolation.
+* Set `-DDEBUG=ON` at configure time for extra parser/codegen logging during test runs.
+
 
 ## 📖 Documentation
 
@@ -95,12 +137,26 @@ cmake --build . --target docs
 "$BROWSER" docs/build/html/index.html
 ```
 
+Or use the helper script (auto-configures if `build/` is missing):
+
+```bash
+./build_docs.sh
+```
+
+Set `CONFIG_ARGS` to pass extra CMake options:
+
+```bash
+CONFIG_ARGS="-DENABLE_TESTING=ON -DDEBUG=ON" ./build_docs.sh
+```
+
 ## 🗂️ Project Structure
 
 - `src/` — Source code (.c, .h files)
 - `examples/` — Example C files for testing
 - `docs/` — Sphinx documentation
 - `build/` — Build output
+- `run_tests.sh` — Helper to configure (if needed), build, and run all tests
+- `build_docs.sh` — Helper to configure (if needed) and build Sphinx HTML docs
 - `CMakeLists.txt` — Build configuration
 - `.gitignore` — Git ignore rules
 
@@ -139,8 +195,9 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 
 ### 🚧 Roadmap
 
-1. **Control Flow Statements**
-   - Next: Add support for `for` loops
+1. **Control Flow Enhancements**
+   - (Done) `for` loops (including nesting)
+   - Potential: `do { } while(...)`, `switch`/`case`
 
 2. **Global Variable Support**
    - Parse and represent global variable declarations
@@ -163,3 +220,7 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 
 7. **Code Cleanup and Restructuring**
    - Ensure clean code, improve maintainability, and refactor as needed
+8. **Testing Improvements**
+   - Add parser integration (end-to-end) tests from sample C → expected VHDL
+   - Introduce fixtures/mocks for global state isolation
+   - Optional: coverage reporting (gcov / lcov) target

@@ -14,6 +14,7 @@ Welcome to Compi's documentation!
    examples
    modules
    architecture
+   testing
    contributing
    known_issues
    license
@@ -73,7 +74,7 @@ Features
    - VHDL codegen emits exit; for break and next; for continue
 
 Debug Build Instructions
------------------------
+------------------------
 
 To enable verbose debug output for developers, configure the build with the -DDEBUG=ON argument:
 
@@ -88,7 +89,7 @@ Roadmap
 -------
 
 1. Control Flow Statements
-   - For loop and nested for loop support implemented
+   - For loop and nested for loop support implemented (DONE)
 2. Global Variable Support
    - Parse and represent global variable declarations
    - Generate VHDL for global signals
@@ -105,6 +106,11 @@ Roadmap
    - Add more example C files and expected VHDL outputs
 7. Code Cleanup and Restructuring
    - Ensure clean code, improve maintainability, and refactor as needed
+8. Testing Improvements
+   - Add parser end-to-end tests (C → VHDL)
+   - Add coverage reporting target
+   - Improve isolation for global state in unit tests
+
 
 Introduction
 ------------
