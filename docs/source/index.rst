@@ -47,6 +47,26 @@ Features
       - char[] → character
    - Initializers are converted to valid VHDL literals for each type
    - Array element access and assignment use VHDL syntax: arr(i)
+
+- For loop and nested for loop support
+   - Parse and generate VHDL for C-style for (init; cond; incr) { ... } loops
+   - Supports variable declarations and assignments in loop headers
+   - Nested for loops are parsed and translated to VHDL
+   - VHDL codegen desugars for-loops into initialization, while loop, and increment logic
+   - Example:
+
+    .. code-block:: c
+
+      int for_loop_sum(int n) {
+         int sum = 0;
+         for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+               sum = sum + i + j;
+            }
+         }
+         return sum;
+      }
+
 - While loop, break, and continue support
    - Parse and generate VHDL for while (<expr>) { ... } loops
    - Support for break; and continue; statements inside loops, including inside if, else if, and else blocks within loops
@@ -68,7 +88,7 @@ Roadmap
 -------
 
 1. Control Flow Statements
-   - Next: Add support for for loops
+   - For loop and nested for loop support implemented
 2. Global Variable Support
    - Parse and represent global variable declarations
    - Generate VHDL for global signals

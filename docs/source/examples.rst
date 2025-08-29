@@ -6,11 +6,23 @@ This section showcases example C files and their generated VHDL output.
 Example C file:
 ---------------
 
+
 .. code-block:: c
 
    int add(int a, int b) {
-       int sum = a + b;
-       return sum;
+     int sum = a + b;
+     return sum;
+   }
+
+   // Example: Nested for loop
+   int for_loop_sum(int n) {
+     int sum = 0;
+     for (int i = 0; i < n; i++) {
+       for (int j = 0; j < n; j++) {
+         sum = sum + i + j;
+       }
+     }
+     return sum;
    }
 
 Generated VHDL

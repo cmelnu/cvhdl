@@ -510,6 +510,138 @@ ASTNode* parse_statement(FILE *input) {
         return stmt_node;
     }
 
+    // Parse for loop: for (init; cond; incr) { ... }
+    if (match(TOKEN_KEYWORD) && strcmp(current_token.value, "for") == 0) {
+        advance(input);
+    if (!consume(input, TOKEN_PARENTHESIS_OPEN)) {
+            printf("Error (line %d): Expected '(' after 'for'\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        // Parse optional init statement (reuse variable decl or assignment parsing in a limited fashion)
+        ASTNode *init_node = NULL;
+        if (!match(TOKEN_SEMICOLON)) {
+            long saved_pos = ftell(input);
+            Token saved_token = current_token;
+            if (match(TOKEN_KEYWORD) && (
+                strcmp(current_token.value, "int") == 0 ||
+                strcmp(current_token.value, "float") == 0 ||
+                strcmp(current_token.value, "char") == 0 ||
+                strcmp(current_token.value, "double") == 0)) {
+                // Parse as a standalone statement then extract first child
+                ASTNode *init_stmt = parse_statement(input);
+                if (init_stmt && init_stmt->num_children > 0) {
+                    ASTNode *child0 = init_stmt->children[0];
+                    if (child0->type == NODE_VAR_DECL || child0->type == NODE_ASSIGNMENT) {
+                        init_node = child0;
+                    }
+                }
+            } else {
+                // Attempt assignment expression of form ident = expr;
+                if (match(TOKEN_IDENTIFIER)) {
+                    Token temp_lhs = current_token;
+                    advance(input);
+                    if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
+                        advance(input);
+                        ASTNode *assign = create_node(NODE_ASSIGNMENT);
+                        ASTNode *lhs_expr = create_node(NODE_EXPRESSION);
+                        lhs_expr->value = strdup(temp_lhs.value);
+                        add_child(assign, lhs_expr);
+                        ASTNode *rhs_expr = parse_expression(input);
+                        if (rhs_expr) add_child(assign, rhs_expr);
+                        if (!consume(input, TOKEN_SEMICOLON)) {
+                            printf("Error (line %d): Expected ';' after for-init assignment\n", current_token.line);
+                            exit(EXIT_FAILURE);
+                        }
+                        init_node = assign;
+                    } else {
+                        // Rewind if not an assignment (treat as empty init)
+                        fseek(input, saved_pos, SEEK_SET);
+                        current_token = saved_token; // crude restore
+                    }
+                }
+            }
+        } else {
+            // Empty init
+        }
+        if (match(TOKEN_SEMICOLON)) advance(input); // consume separator
+
+        // Parse condition expression (or empty)
+        ASTNode *cond_expr = NULL;
+        if (!match(TOKEN_SEMICOLON)) {
+            cond_expr = parse_expression(input);
+        }
+        if (!consume(input, TOKEN_SEMICOLON)) {
+            printf("Error (line %d): Expected ';' after for condition\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        // Parse increment expression (or empty)
+        ASTNode *incr_expr = NULL;
+        if (!match(TOKEN_PARENTHESIS_CLOSE)) {
+            // Support forms: i = i + 1; i++; ++i; i--; --i
+            if (match(TOKEN_IDENTIFIER)) {
+                Token inc_lhs = current_token;
+                advance(input);
+                if (match(TOKEN_OPERATOR) && (strcmp(current_token.value, "++") == 0 || strcmp(current_token.value, "--") == 0)) {
+                    incr_expr = create_node(NODE_ASSIGNMENT);
+                    ASTNode *lhs = create_node(NODE_EXPRESSION);
+                    lhs->value = strdup(inc_lhs.value);
+                    add_child(incr_expr, lhs);
+                    ASTNode *rhs = create_node(NODE_BINARY_EXPR);
+                    rhs->value = strdup(strcmp(current_token.value, "++") == 0 ? "+" : "-");
+                    ASTNode *op_l = create_node(NODE_EXPRESSION); op_l->value = strdup(inc_lhs.value);
+                    ASTNode *op_r = create_node(NODE_EXPRESSION); op_r->value = strdup("1");
+                    add_child(rhs, op_l); add_child(rhs, op_r);
+                    add_child(incr_expr, rhs);
+                    advance(input);
+                } else if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
+                    // i = expr
+                    advance(input);
+                    incr_expr = create_node(NODE_ASSIGNMENT);
+                    ASTNode *lhs = create_node(NODE_EXPRESSION); lhs->value = strdup(inc_lhs.value); add_child(incr_expr, lhs);
+                    ASTNode *rhs = parse_expression(input); if (rhs) add_child(incr_expr, rhs);
+                } else {
+                    // Unsupported increment pattern – ignore
+                }
+            }
+        }
+        if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+            printf("Error (line %d): Expected ')' after for header\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        if (!consume(input, TOKEN_BRACE_OPEN)) {
+            printf("Error (line %d): Expected '{' after for header\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+        ASTNode *for_node = create_node(NODE_FOR_STATEMENT);
+        // Children order: init, condition, body statements..., increment (stored last for codegen)
+        if (init_node) add_child(for_node, init_node);
+        if (cond_expr) add_child(for_node, cond_expr); else {
+            // If no condition, create a constant true (while true loop)
+            ASTNode *true_expr = create_node(NODE_EXPRESSION); true_expr->value = strdup("1"); add_child(for_node, true_expr);
+        }
+
+        s_loop_depth++;
+        while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+            ASTNode *inner = parse_statement(input);
+            if (inner) add_child(for_node, inner);
+        }
+        s_loop_depth--;
+
+        if (!consume(input, TOKEN_BRACE_CLOSE)) {
+            printf("Error (line %d): Expected '}' after for body\n", current_token.line);
+            exit(EXIT_FAILURE);
+        }
+
+    if (incr_expr) add_child(for_node, incr_expr);
+
+        add_child(stmt_node, for_node);
+        return stmt_node;
+    }
+
     // Parse break statement: break;
     if ((match(TOKEN_KEYWORD) && strcmp(current_token.value, "break") == 0) ||
         (match(TOKEN_IDENTIFIER) && strcmp(current_token.value, "break") == 0)) {
@@ -836,6 +968,22 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                                     ctype_to_vhdl(stmt_child->token.value));
                             }
                         }
+                        // Recurse into for-loop headers for var declarations
+                        if (stmt_child->type == NODE_FOR_STATEMENT) {
+                            for (int f = 0; f < stmt_child->num_children; f++) {
+                                ASTNode *for_child = stmt_child->children[f];
+                                if (for_child->type == NODE_VAR_DECL) {
+                                    char *arr_br = for_child->value ? strchr(for_child->value, '[') : NULL;
+                                    if (arr_br) {
+                                        int name_len = arr_br - for_child->value; char arr_name[64]={0}; strncpy(arr_name, for_child->value, name_len);
+                                        char arr_size[32]={0}; const char *size_start = arr_br+1; const char *size_end = strchr(size_start, ']');
+                                        if (size_end && size_end>size_start) { strncpy(arr_size, size_start, size_end-size_start); const char *vhdl_elem_type = ctype_to_vhdl(for_child->token.value); fprintf(output, "  type %s_type is array (0 to %d) of %s;\n", arr_name, atoi(arr_size)-1, vhdl_elem_type); fprintf(output, "  signal %s : %s_type;\n", arr_name, arr_name); }
+                                    } else {
+                                        fprintf(output, "  signal %s : %s;\n", for_child->value, ctype_to_vhdl(for_child->token.value));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -912,6 +1060,10 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 if (child->type == NODE_WHILE_STATEMENT) {
                     generate_vhdl(child, output);
                 }
+                // For loop VHDL generation
+                if (child->type == NODE_FOR_STATEMENT) {
+                    generate_vhdl(child, output);
+                }
                 // Break / Continue inside loops
                 if (child->type == NODE_BREAK_STATEMENT || child->type == NODE_CONTINUE_STATEMENT) {
                     generate_vhdl(child, output);
@@ -972,6 +1124,87 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             fprintf(output, " loop\n");
             for (int j = 1; j < node->num_children; j++) {
                 generate_vhdl(node->children[j], output);
+            }
+            fprintf(output, "      end loop;\n");
+            break;
+        }
+        case NODE_FOR_STATEMENT: {
+            // Layout assumptions: first child (optional init assignment/var decl) already executed outside loop or must be executed before loop body.
+            // We'll emit init first (if present and is assignment) then a while loop with condition, and append increment at end of body.
+            if (node->num_children == 0) break;
+            ASTNode *first = node->children[0];
+            int cond_index = 0;
+            if (first->type == NODE_ASSIGNMENT || first->type == NODE_VAR_DECL) {
+                // Emit init
+                if (first->type == NODE_ASSIGNMENT && first->num_children == 2) {
+                    ASTNode *lhs = first->children[0];
+                    ASTNode *rhs = first->children[1];
+                    fprintf(output, "      ");
+                    if (lhs->value && strchr(lhs->value, '[')) {
+                        char arr_name[64]={0}; char arr_idx[64]={0}; const char *lbr=strchr(lhs->value,'[');
+                        if (lbr){int name_len=lbr-lhs->value;strncpy(arr_name,lhs->value,name_len);const char *idx_start=lbr+1;const char *idx_end=strchr(idx_start,']'); if(idx_end&&idx_end>idx_start){strncpy(arr_idx,idx_start,idx_end-idx_start); fprintf(output, "%s(%s) <= ", arr_name, arr_idx); generate_vhdl(rhs, output); fprintf(output, ";\n");}}
+                    } else {
+                        fprintf(output, "%s <= ", lhs->value ? lhs->value : "unknown");
+                        generate_vhdl(rhs, output);
+                        fprintf(output, ";\n");
+                    }
+                    cond_index = 1;
+                } else if (first->type == NODE_VAR_DECL) {
+                    // Variable declarations with optional init handled similarly to NODE_STATEMENT generation logic
+                    if (first->num_children > 0) {
+                        ASTNode *init = first->children[0];
+                        fprintf(output, "      %s <= ", first->value ? first->value : "unknown");
+                        generate_vhdl(init, output);
+                        fprintf(output, ";\n");
+                    }
+                    cond_index = 1;
+                }
+            }
+            if (cond_index >= node->num_children) break;
+            ASTNode *cond = node->children[cond_index];
+            // Determine increment (last child if assignment and not part of body)
+            int incr_index = node->num_children - 1;
+            ASTNode *incr = NULL;
+            if (node->children[incr_index]->type == NODE_ASSIGNMENT && incr_index != cond_index) {
+                incr = node->children[incr_index];
+            } else {
+                incr_index = -1;
+            }
+            fprintf(output, "      while ");
+            if (cond->type == NODE_BINARY_EXPR) {
+                const char *cop = cond->value;
+                int is_bool = (strcmp(cop, "==") == 0 || strcmp(cop, "!=") == 0 || strcmp(cop, "<") == 0 || strcmp(cop, "<=") == 0 || strcmp(cop, ">") == 0 || strcmp(cop, ">=") == 0 || strcmp(cop, "&&") == 0 || strcmp(cop, "||") == 0);
+                if (is_bool) {
+                    generate_vhdl(cond, output);
+                } else {
+                    fprintf(output, "unsigned("); generate_vhdl(cond, output); fprintf(output, ") /= 0");
+                }
+            } else if (cond->type == NODE_BINARY_OP) {
+                generate_vhdl(cond, output);
+            } else if (cond->type == NODE_EXPRESSION && cond->value) {
+                fprintf(output, "unsigned(%s) /= 0", cond->value);
+            } else {
+                fprintf(output, "( %s )", cond->value ? cond->value : "false");
+            }
+            fprintf(output, " loop\n");
+            for (int j = cond_index + 1; j < node->num_children; j++) {
+                if (j == incr_index) continue; // skip increment, emit at end
+                generate_vhdl(node->children[j], output);
+            }
+            if (incr) {
+                if (incr->num_children == 2) {
+                    ASTNode *lhs = incr->children[0];
+                    ASTNode *rhs = incr->children[1];
+                    fprintf(output, "        ");
+                    if (lhs->value && strchr(lhs->value, '[')) {
+                        char arr_name[64]={0}; char arr_idx[64]={0}; const char *lbr=strchr(lhs->value,'[');
+                        if (lbr){int name_len=lbr-lhs->value;strncpy(arr_name,lhs->value,name_len);const char *idx_start=lbr+1;const char *idx_end=strchr(idx_start,']'); if(idx_end&&idx_end>idx_start){strncpy(arr_idx,idx_start,idx_end-idx_start); fprintf(output, "%s(%s) <= ", arr_name, arr_idx); generate_vhdl(rhs, output); fprintf(output, ";\n");}}
+                    } else {
+                        fprintf(output, "%s <= ", lhs->value ? lhs->value : "unknown");
+                        generate_vhdl(rhs, output);
+                        fprintf(output, ";\n");
+                    }
+                }
             }
             fprintf(output, "      end loop;\n");
             break;

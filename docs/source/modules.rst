@@ -23,11 +23,11 @@ parse.c / parse.h
 -----------------
 Implements the parser and AST construction.
 
-- Parsing function declarations, parameters, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`, `while`, `break`, `continue`).
+- Parsing function declarations, parameters, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`, `while`, `for`, `break`, `continue`).
 - Building the AST (Abstract Syntax Tree) for the input C code.
 - Handling binary expressions, operator precedence, parentheses, unary minus, and negative literals/identifiers.
 - Supporting nested and chained expressions for assignments and conditions.
-- Supporting nested while loops and correct handling of break/continue at any loop depth.
+- Supporting nested while loops, nested for loops, and correct handling of break/continue at any loop depth.
 - Printing improved error messages with the exact line number of the source file where parsing errors occur.
 - Declares AST node types, parser function prototypes, and supporting data structures for parsing, including support for control flow and arrays.
 

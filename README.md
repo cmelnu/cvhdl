@@ -3,6 +3,7 @@
 Compi is a tool that translates C source code into VHDL hardware descriptions.  
 Easily convert your algorithms from software to hardware! 🖥️➡️🔌
 
+
 ## ✨ Features
 
 - 📝 Lexical analysis of C code (tokenizer)
@@ -31,7 +32,27 @@ Easily convert your algorithms from software to hardware! 🖥️➡️🔌
       - `char[]` → `character`
    - Initializers are converted to valid VHDL literals for each type
    - Array element access and assignment use VHDL syntax: `arr(i)`
-- 🔁 **While loop, break, and continue support**
+
+-- 🔁 **For loop and nested for loop support**
+   - Parse and generate VHDL for C-style `for (init; cond; incr) { ... }` loops
+   - Supports variable declarations and assignments in loop headers
+   - Nested for loops are parsed and translated to VHDL (see example below)
+   - VHDL codegen desugars for-loops into initialization, while loop, and increment logic
+   - Example:
+
+```c
+int for_loop_sum(int n) {
+   int sum = 0;
+   for (int i = 0; i < n; i++) {
+      for (int j = 0; j < n; j++) {
+         sum = sum + i + j;
+      }
+   }
+   return sum;
+}
+```
+
+-- 🔁 **While loop, break, and continue support**
    - Parse and generate VHDL for `while (<expr>) { ... }` loops
    - Support for `break;` and `continue;` statements inside loops, including inside `if`, `else if`, and `else` blocks within loops
    - VHDL codegen emits `exit;` for `break` and `next;` for `continue`
@@ -114,6 +135,7 @@ Here’s what’s planned next for Compi, based on the current state of `parse.c
 - Support for unary minus and negative literals/identifiers in expressions
 - Basic VHDL code generation with type mapping
 - Parsing and code generation for `while` loops, `break`, and `continue` statements
+- Parsing and code generation for C-style `for` loops, including nested for loops
 
 ### 🚧 Roadmap
 

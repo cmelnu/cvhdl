@@ -9,20 +9,20 @@ The compiler is structured as a pipeline:
 
 2. **Parsing (parse.c / parse.h)**
     - Consumes the token stream and builds an Abstract Syntax Tree (AST).
-    - Supports function declarations, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`, `while`, `break`, `continue`).
+    - Supports function declarations, variable declarations, assignments, return statements, and control flow (`if`, `else if`, `else`, `while`, `for`, `break`, `continue`).
     - Handles binary and unary expressions, including negative literals and identifiers.
-    - Supports nested while loops and correct handling of break/continue at any loop depth.
+    - Supports nested while loops, nested for loops, and correct handling of break/continue at any loop depth.
 
 3. **AST Representation (astnode.c / astnode.h)**
     - Defines node types for all supported C constructs.
     - Provides data structures and functions for creating, freeing, and manipulating AST nodes.
-    - Supports nested expressions and statement blocks.
+    - Supports nested expressions and statement blocks, including nested for and while loops.
 
 4. **VHDL Code Generation (compi.c, parse.c)**
     - Traverses the AST and emits VHDL code.
     - Maps C types to VHDL types, handles signal declarations, assignments, and control flow.
     - Handles negative values and binary expressions correctly in VHDL.
-    - Generates VHDL for while loops, including nested loops, break, and continue statements.
+    - Generates VHDL for while loops and for loops, including nested loops, break, and continue statements.
 
 5. **Utilities (utils.c / utils.h)**
     - Provides string manipulation, error handling, memory management, type mapping, and AST printing.

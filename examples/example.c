@@ -72,3 +72,14 @@ int while_nested_loop(int outer_limit, int inner_limit) {
     return total;
 }
 
+// New function to test 'for' loop support
+int for_loop_sum(int n) {
+    int sum = 0;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            sum = sum + i + j;
+        }
+    }
+    return sum;
+}
+

@@ -145,7 +145,7 @@ Token get_next_token(FILE *input) {
             default: break;
         }
 
-        // Multi-character operators: ==, !=, <=, >=, <<, >>, &&, ||
+        // Multi-character operators: ==, !=, <=, >=, <<, >>, &&, ||, ++, --
         token.type = TOKEN_OPERATOR;
         if (c == '=' && d == '=') {
             token.value[0] = '=';
@@ -178,6 +178,14 @@ Token get_next_token(FILE *input) {
         } else if (c == '|' && d == '|') {
             token.value[0] = '|';
             token.value[1] = '|';
+            token.value[2] = '\0';
+        } else if (c == '+' && d == '+') {
+            token.value[0] = '+';
+            token.value[1] = '+';
+            token.value[2] = '\0';
+        } else if (c == '-' && d == '-') {
+            token.value[0] = '-';
+            token.value[1] = '-';
             token.value[2] = '\0';
         } else {
             // Single-character operator
