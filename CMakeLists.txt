@@ -17,39 +17,42 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # Collect all C sources
 # List sources explicitly (begin modular refactor) instead of broad glob
 set(COMPI_ALL_SRC
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/astnode.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_expression.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_struct.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_function.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_statement.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen_vhdl.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/token.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_structs.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_arrays.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/core/astnode.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_expression.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_struct.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_function.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/parse_statement.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen/codegen_vhdl.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parser/token.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/core/utils.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbols/symbol_structs.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbols/symbol_arrays.c
 )
 
 # Separate main file to allow creating a reusable core library for tests
-set(COMPI_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/compi.c")
-set(COMPI_CORE_SRC ${COMPI_ALL_SRC})
-list(REMOVE_ITEM COMPI_CORE_SRC "${COMPI_MAIN_SRC}")
+set(COMPI_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/app/compi.c")
+set(compi_gtest_SRC ${COMPI_ALL_SRC})
+list(REMOVE_ITEM compi_gtest_SRC "${COMPI_MAIN_SRC}")
 
-add_library(compi_core ${COMPI_CORE_SRC})
-target_include_directories(compi_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_library(compi_gtest ${compi_gtest_SRC})
+target_include_directories(compi_gtest PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
 add_executable(compi ${COMPI_MAIN_SRC})
-target_link_libraries(compi PRIVATE compi_core)
+target_link_libraries(compi PRIVATE compi_gtest)
 
 # Add compiler warnings
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(compi_core PRIVATE -Wall -Wextra -Wpedantic)
+  target_compile_options(compi_gtest PRIVATE -Wall -Wextra -Wpedantic)
   target_compile_options(compi PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 if(DEBUG)
   message(STATUS "DEBUG enabled")
-  target_compile_definitions(compi_core PUBLIC DEBUG)
+  target_compile_definitions(compi_gtest PUBLIC DEBUG)
   target_compile_definitions(compi PRIVATE DEBUG)
 endif()
 
@@ -91,15 +94,18 @@ if(ENABLE_TESTING)
   if(TEST_SOURCES)
     add_executable(compi_tests ${TEST_SOURCES})
     if(TARGET GTest::gtest_main)
-      target_link_libraries(compi_tests PRIVATE GTest::gtest_main compi_core)
+      target_link_libraries(compi_tests PRIVATE GTest::gtest_main compi_gtest)
     elseif(TARGET gtest_main)
-      target_link_libraries(compi_tests PRIVATE gtest_main compi_core)
+      target_link_libraries(compi_tests PRIVATE gtest_main compi_gtest)
     elseif(TARGET gtest)
-      target_link_libraries(compi_tests PRIVATE gtest compi_core)
+      target_link_libraries(compi_tests PRIVATE gtest compi_gtest)
     else()
       message(FATAL_ERROR "No gtest_main or gtest target available")
     endif()
-    target_include_directories(compi_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_include_directories(compi_tests PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
 
     # Discover each GoogleTest test case so they show individually in CTest
     include(GoogleTest)
