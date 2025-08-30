@@ -6,9 +6,10 @@ Minimal C subset → VHDL translator. Focused on simple functions, control flow,
 * Tokenizer, recursive-descent parser, AST builder
 * Expressions with precedence (arith / shifts / bitwise / compare / logical / unary)
 * Control flow: `if / else if / else`, `while`, `for`, `break`, `continue`
+* Structs: declarations, assignments, field access, and C-style initializers
 * Arrays with declarations, initializers, indexed access
 * Basic VHDL code generation (entity/architecture skeleton + signal mapping)
-* Type mapping: `int|float|double|char` → suitable VHDL types
+* Type mapping: `int|float|double|char|struct` → suitable VHDL types
 * GoogleTest unit tests (auto-discovered via CTest)
 * Sphinx docs
 
@@ -70,9 +71,10 @@ Shortcuts:
 * Logical ops don’t model C short‑circuit timing
 * No optimization / resource tuning in VHDL output
 * Potential signal naming collisions
+* Structs: no support for nested structs or arrays of structs yet
 
 ## ✅ Operator Coverage (Summary)
 Arithmetic, shifts, bitwise, comparisons, logical (no short‑circuit semantics), unary minus / logical not, control flow + arrays.
 
 ## 🗺️ Roadmap (Short)
-Next focus areas: global vars, function calls, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
+Next focus areas: global vars, function calls, nested structs, arrays of structs, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
