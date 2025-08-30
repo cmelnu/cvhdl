@@ -15,7 +15,15 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Collect all C sources
-file(GLOB COMPI_ALL_SRC "src/*.c")
+# List sources explicitly (begin modular refactor) instead of broad glob
+set(COMPI_ALL_SRC
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/astnode.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/token.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_structs.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_arrays.c
+)
 
 # Separate main file to allow creating a reusable core library for tests
 set(COMPI_MAIN_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/compi.c")

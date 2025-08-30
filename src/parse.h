@@ -3,10 +3,7 @@
 
 #include "astnode.h"
 
-typedef struct {
-    char name[64];
-    int size; // number of elements
-} ArrayInfo;
+// Parsing interface (monolithic for now; will be split further)
 
 // Forward declarations for recursive descent parsing
 ASTNode* parse_program(FILE *input);
@@ -23,19 +20,7 @@ void print_ast(ASTNode* node, int level);
 ASTNode* parse_expression_prec(FILE *input, int min_prec);
 ASTNode* parse_primary(FILE *input);
 
-// Helper for VHDL codegen
+// Helper for VHDL codegen (still provided by utils)
 int is_negative_literal(const char* value);
-
-// Struct metadata helpers
-typedef struct {
-    char name[64];
-    struct { char field_name[64]; char field_type[32]; } fields[32];
-    int field_count;
-} StructInfo;
-
-extern StructInfo g_structs[64];
-extern int g_struct_count;
-int find_struct_index(const char *name);
-const char* struct_field_type(const char *struct_name, const char *field_name);
 
 #endif
