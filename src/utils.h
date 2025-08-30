@@ -15,4 +15,7 @@ int is_number_str(const char *s);
 int is_negative_literal(const char* value);
 int get_precedence(const char *op);
 
+int find_struct_index(const char *name);
+const char* struct_field_type(const char *struct_name, const char *field_name);
+
 #endif

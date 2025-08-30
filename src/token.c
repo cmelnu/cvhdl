@@ -10,6 +10,7 @@ int current_line = 1; // Track current line number
 // List of C keywords
 const char *keywords[] = {
     "if", "else", "while", "for", "return", "break", "continue",
+    "struct",
     "int", "float", "char", "double", "void",
     NULL
 };
