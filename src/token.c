@@ -59,6 +59,7 @@ Token get_next_token(FILE *input) {
     while ((c = fgetc(input)) != EOF && isspace(c)) {
         if (c == '\n') current_line++; // Increment line on newline
     }
+
     if (c == EOF) {
         token.type = TOKEN_EOF;
         token.value[0] = '\0';

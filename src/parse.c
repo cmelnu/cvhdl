@@ -16,6 +16,112 @@ extern int g_array_count;
 // Track loop depth to validate break/continue usage
 static int s_loop_depth = 0;
 
+// ---- Sequential variable tracking helpers (for C-like multiple assignments semantics) ----
+typedef struct {
+    const char *orig;          // original signal name
+    char gen[64];              // generated process variable name (e.g. x_v, x_v1, foo_v0 if original already ends with _v)
+    const char *vhdl_type;     // cached VHDL type string
+    int ordinal;               // 0 for first ( _v ), >0 for numbered shadow ( _v1, _v2 ... )
+} TrackedVar;
+
+static TrackedVar g_tracked_vars[256];
+static int g_tracked_count = 0;
+static int g_tracking_active = 0;   // inside function architecture
+static int g_in_clock_body = 0;      // inside rising_edge(clk) section
+static int find_tracked(const char *name) {
+    if (!g_tracking_active || !name) return -1;
+    for (int i = 0; i < g_tracked_count; i++) {
+        if (strcmp(g_tracked_vars[i].orig, name) == 0) return i;
+    }
+    return -1;
+}
+
+
+void build_gen_name(const char *orig, int ordinal, char *out, size_t outsz) {
+    // Collision guard: if orig already ends with _v or _v<digits>, append ordinal directly (0 for first) else add _v (and number if >0)
+    if (!orig || !out || outsz == 0) return;
+    int has_v_suffix = 0;
+    size_t len = strlen(orig);
+    if (len >= 2 && orig[len-2] == '_' && orig[len-1] == 'v') {
+        has_v_suffix = 1;
+    } else {
+        // detect _v<number>
+        const char *p = strrchr(orig, '_');
+        if (p && p[1] == 'v') {
+            // check digits after _v
+            int only_digits = 1; const char *q = p + 2; if (*q == '\0') only_digits = 0; // _v with nothing handled above
+            while (*q) { if (*q < '0' || *q > '9') { only_digits = 0; break; } q++; }
+            if (only_digits) has_v_suffix = 1;
+        }
+    }
+    if (ordinal == 0) {
+        if (has_v_suffix) {
+            snprintf(out, outsz, "%s0", orig); // first shadow when name already ends with _v -> append 0
+        } else {
+            snprintf(out, outsz, "%s_v", orig);
+        }
+    } else {
+        if (has_v_suffix) {
+            snprintf(out, outsz, "%s%d", orig, ordinal); // e.g. foo_v1
+        } else {
+            snprintf(out, outsz, "%s_v%d", orig, ordinal); // e.g. foo_v1 for second shadow of foo
+        }
+    }
+}
+
+// ---- Function call VHDL support helpers ----
+void annotate_func_calls(ASTNode *n, int *counter) {
+    if (!n) return;
+    if (n->type == NODE_FUNC_CALL && n->value) {
+        if (!strchr(n->value, '#')) {
+            char buf[256];
+            snprintf(buf, sizeof(buf), "%s#%d", n->value, (*counter)++);
+            free(n->value);
+            n->value = strdup(buf);
+        }
+    }
+    for (int i = 0; i < n->num_children; i++) annotate_func_calls(n->children[i], counter);
+}
+
+void declare_func_call_signals(ASTNode *n, FILE *output) {
+    if (!n) return;
+    if (n->type == NODE_FUNC_CALL && n->value) {
+        const char *hash = strchr(n->value, '#');
+        if (hash) {
+            char fname[128] = {0}; int len = (int)(hash - n->value); if (len > 120) len = 120; strncpy(fname, n->value, len);
+            int idx = atoi(hash + 1);
+            fprintf(output, "  signal call_%s_%d_res : std_logic_vector(31 downto 0);\n", fname, idx);
+        }
+    }
+    for (int i = 0; i < n->num_children; i++) declare_func_call_signals(n->children[i], output);
+}
+
+// Forward declarations moved to header (parse.h)
+
+void emit_inline_expr(ASTNode *expr, FILE *output) {
+    if (!expr) { fprintf(output, "(others => '0')"); return; }
+    // Reuse generate_vhdl for most nodes (avoid trailing semicolons)
+    generate_vhdl(expr, output);
+}
+
+void emit_func_call_instantiations(ASTNode *n, FILE *output) {
+    if (!n) return;
+    if (n->type == NODE_FUNC_CALL && n->value) {
+        const char *hash = strchr(n->value, '#');
+        if (hash) {
+            char fname[128] = {0}; int len = (int)(hash - n->value); if (len > 120) len = 120; strncpy(fname, n->value, len);
+            int idx = atoi(hash + 1);
+            fprintf(output, "  u_%s_%d: entity work.%s port map( clk, reset", fname, idx, fname);
+            for (int a = 0; a < n->num_children; a++) {
+                fprintf(output, ", ");
+                emit_inline_expr(n->children[a], output);
+            }
+            fprintf(output, ", call_%s_%d_res );\n", fname, idx);
+        }
+    }
+    for (int i = 0; i < n->num_children; i++) emit_func_call_instantiations(n->children[i], output);
+}
+
 // Parse the entire program
 ASTNode* parse_program(FILE *input) {
 
@@ -740,7 +846,10 @@ ASTNode* parse_primary(FILE *input) {
     // Parenthesized expression
     if (match(TOKEN_PARENTHESIS_OPEN)) {
         advance(input);
-        ASTNode *node = parse_expression_prec(input, 1);
+    // Use lowest precedence so all operators inside parentheses are parsed.
+    // Previously used min_prec=1 which excluded operators with precedence <1 (e.g. '|', '||', '&&'),
+    // causing a failure to consume them before encountering the closing ')'.
+    ASTNode *node = parse_expression_prec(input, -2);
         if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
             printf("Error (line %d): Expected ')' after expression\n", current_token.line);
             exit(EXIT_FAILURE);
@@ -753,6 +862,24 @@ ASTNode* parse_primary(FILE *input) {
         char ident_buf[128] = {0};
         strncpy(ident_buf, current_token.value, sizeof(ident_buf)-1);
         advance(input);
+        // Function call: ident '(' args? ')' -> NODE_FUNC_CALL treated like expression (result of call)
+        if (match(TOKEN_PARENTHESIS_OPEN)) {
+            advance(input); // consume '('
+            ASTNode *call = create_node(NODE_FUNC_CALL);
+            call->value = strdup(ident_buf); // function name
+            // Parse zero or more comma separated expressions until ')'
+            while (!match(TOKEN_PARENTHESIS_CLOSE) && !match(TOKEN_EOF)) {
+                ASTNode *arg = parse_expression_prec(input, -2);
+                if (arg) add_child(call, arg);
+                if (match(TOKEN_COMMA)) { advance(input); continue; }
+                else break; // no comma => expect ')'
+            }
+            if (!consume(input, TOKEN_PARENTHESIS_CLOSE)) {
+                printf("Error (line %d): Expected ')' after function call arguments for '%s'\n", current_token.line, ident_buf);
+                exit(EXIT_FAILURE);
+            }
+            return call;
+        }
         // Check for array indexing: ident[expr]
         if (match(TOKEN_BRACKET_OPEN)) {
             advance(input);
@@ -854,6 +981,8 @@ ASTNode* parse_expression(FILE *input) {
 void generate_vhdl(ASTNode* node, FILE* output) {
 
     char* result_vhdl_type = "std_logic_vector(31 downto 0)"; // default
+
+    // Variableization helpers now global; emit_identifier inlined where needed.
     
     if (!node) return;
     
@@ -879,14 +1008,19 @@ void generate_vhdl(ASTNode* node, FILE* output) {
 
             // Generate ports for parameters with type mapping
             int param_count = 0;
+            // Collect parameter declarations first to format separators correctly
+            int total_params = 0;
+            for (int i = 0; i < node->num_children; i++) {
+                if (node->children[i]->type == NODE_VAR_DECL) total_params++;
+            }
             for (int i = 0; i < node->num_children; i++) {
                 ASTNode *child = node->children[i];
                 if (child->type == NODE_VAR_DECL) {
-                    fprintf(output, "    %s : in %s%s\n",
-                        child->value,
-                        ctype_to_vhdl(child->token.value),
-                        (param_count == node->num_children - 1) ? "," : ";");
                     param_count++;
+                    // All parameter lines end with ';' in VHDL port list except optional formatting before result.
+                    fprintf(output, "    %s : in %s;\n",
+                        child->value,
+                        ctype_to_vhdl(child->token.value));
                 }
             }
 
@@ -988,18 +1122,68 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 }
             }
 
+            // Function call signals
+            int call_counter = 0;
+            for (int i = 0; i < node->num_children; i++) annotate_func_calls(node->children[i], &call_counter);
+            for (int i = 0; i < node->num_children; i++) declare_func_call_signals(node->children[i], output);
+
             fprintf(output, "begin\n");
+            // Instantiate function calls (concurrent)
+            for (int i = 0; i < node->num_children; i++) emit_func_call_instantiations(node->children[i], output);
+
+            // Collect scalar locals for variableization (with collision guard and numbering)
+            g_tracked_count = 0; g_tracking_active = 1;
+            for (int i = 0; i < node->num_children; i++) {
+                ASTNode *child = node->children[i];
+                if (child->type != NODE_STATEMENT) continue;
+                for (int j = 0; j < child->num_children; j++) {
+                    ASTNode *st = child->children[j];
+                    if (st->type == NODE_VAR_DECL && st->value) {
+                        if (strchr(st->value, '[')) {
+                            // Array left as signal (no variableization) - emit one-time comment
+                            const char *lbr = strchr(st->value, '[');
+                            if (lbr) {
+                                char base[64] = {0}; int blen = (int)(lbr - st->value); if (blen > 63) blen = 63; strncpy(base, st->value, blen);
+                                fprintf(output, "  -- note: array %s kept as signal (not variableized)\n", base);
+                            } else {
+                                fprintf(output, "  -- note: array %s kept as signal (not variableized)\n", st->value);
+                            }
+                            continue;
+                        }
+                        if (strcmp(st->value, "result") == 0) continue; // skip result
+                        if (g_tracked_count < 256) {
+                            // determine ordinal (shadow count) for this orig name
+                            int ord = 0; for (int p = 0; p < g_tracked_count; p++) if (strcmp(g_tracked_vars[p].orig, st->value) == 0) ord++;
+                            g_tracked_vars[g_tracked_count].orig = st->value;
+                            g_tracked_vars[g_tracked_count].ordinal = ord;
+                            g_tracked_vars[g_tracked_count].vhdl_type = ctype_to_vhdl(st->token.value);
+                            build_gen_name(st->value, ord, g_tracked_vars[g_tracked_count].gen, sizeof(g_tracked_vars[g_tracked_count].gen));
+                            g_tracked_count++;
+                        }
+                    }
+                }
+            }
             fprintf(output, "  process(clk, reset)\n");
+            // Declare process variables for tracked signals
+            if (g_tracked_count > 0) {
+                for (int t = 0; t < g_tracked_count; t++) {
+                    fprintf(output, "    variable %s : %s;\n", g_tracked_vars[t].gen, g_tracked_vars[t].vhdl_type);
+                }
+            }
             fprintf(output, "  begin\n");
             fprintf(output, "    if reset = '1' then\n");
             fprintf(output, "      -- Reset logic\n");
             fprintf(output, "    elsif rising_edge(clk) then\n");
+            g_in_clock_body = 1;
+            for (int t = 0; t < g_tracked_count; t++) fprintf(output, "      %s := %s;\n", g_tracked_vars[t].gen, g_tracked_vars[t].orig);
             for (int i = 0; i < node->num_children; i++) {
                 ASTNode *child = node->children[i];
                 if (child->type == NODE_STATEMENT) {
                     generate_vhdl(child, output); // This will emit result <= ...;
                 }
             }
+            for (int t = 0; t < g_tracked_count; t++) fprintf(output, "      %s <= %s;\n", g_tracked_vars[t].orig, g_tracked_vars[t].gen);
+            g_in_clock_body = 0; g_tracking_active = 0; g_tracked_count = 0;
             fprintf(output, "    end if;\n");
             fprintf(output, "  end process;\n");
             fprintf(output, "end architecture;\n\n");
@@ -1015,7 +1199,12 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     char *arr_bracket = child->value ? strchr(child->value, '[') : NULL;
                     if (child->num_children > 0 && !arr_bracket) {
                         ASTNode *init = child->children[0];
-                        fprintf(output, "      %s <= ", child->value ? child->value : "unknown");
+                        int tracked_idx = find_tracked(child->value);
+                        if (tracked_idx >= 0 && g_in_clock_body) {
+                            fprintf(output, "      %s := ", g_tracked_vars[tracked_idx].gen);
+                        } else {
+                            fprintf(output, "      %s <= ", child->value ? child->value : "unknown");
+                        }
                         generate_vhdl(init, output);
                         fprintf(output, ";\n");
                     }
@@ -1046,11 +1235,23 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                                 }
                             }
                         } else {
-                            fprintf(output, "      %s <= ", lhs->value ? lhs->value : "unknown");
-                            generate_vhdl(rhs, output);
-                            fprintf(output, ";\n");
+                            // Variableized assignment if tracked
+                            int tracked_idx = lhs->value ? find_tracked(lhs->value) : -1;
+                            if (tracked_idx >= 0 && g_in_clock_body) {
+                                fprintf(output, "      %s := ", g_tracked_vars[tracked_idx].gen);
+                                generate_vhdl(rhs, output);
+                                fprintf(output, ";\n");
+                            } else {
+                                fprintf(output, "      %s <= ", lhs->value ? lhs->value : "unknown");
+                                generate_vhdl(rhs, output);
+                                fprintf(output, ";\n");
+                            }
                         }
                     }
+                }
+                // Bare function call as a statement (ignore return value): emit comment / placeholder
+                if (child->type == NODE_FUNC_CALL) {
+                    fprintf(output, "      -- function call %s executed\n", child->value ? child->value : "unknown");
                 }
                 // If statement VHDL generation
                 if (child->type == NODE_IF_STATEMENT) {
@@ -1464,7 +1665,31 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     fprintf(output, "to_signed(%s, 32)", node->value);
                 }
             } else {
-                fprintf(output, "%s", node->value ? node->value : "unknown");
+                if (node->value) {
+                    int idx = find_tracked(node->value);
+                    if (idx >= 0 && g_in_clock_body) {
+                        fprintf(output, "%s", g_tracked_vars[idx].gen);
+                    } else {
+                        fprintf(output, "%s", node->value);
+                    }
+                } else {
+                    fprintf(output, "unknown");
+                }
+            }
+            break;
+        }
+        case NODE_FUNC_CALL: {
+            if (node->value) {
+                const char *hash = strchr(node->value, '#');
+                if (hash) {
+                    char fname[128] = {0}; int len = (int)(hash - node->value); if (len > 120) len = 120; strncpy(fname, node->value, len);
+                    int idx = atoi(hash + 1);
+                    fprintf(output, "call_%s_%d_res", fname, idx);
+                } else {
+                    fprintf(output, "%s_result", node->value);
+                }
+            } else {
+                fprintf(output, "unknown_call_res");
             }
             break;
         }
