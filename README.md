@@ -42,33 +42,16 @@ This will provide additional debug prints and diagnostics during parsing and cod
 
 ## 🧪 Testing
 
-GoogleTest is integrated. Each individual test case is auto-discovered (via `gtest_discover_tests`) so CTest shows every `TEST()` separately.
-
-### Quick start
-```bash
-# Configure (with tests enabled by default) and build
-cmake -S . -B build -DENABLE_TESTING=ON
-cmake --build build --target test_all -j 4
-
-# Or use the helper script (configures if needed, builds, runs tests)
-## 🧪 Testing (Quick)
 ```bash
 cmake -S . -B build -DENABLE_TESTING=ON
 cmake --build build --target test_all -j 4
 ctest --test-dir build --output-on-failure
 ```
-Shortcut scripts:
+Shortcuts:
 ```bash
-./run_tests.sh      # build + run tests
-./build_docs.sh     # build Sphinx docs
-```
-Filter a single test:
-```bash
-./build/compi_tests --gtest_filter=TokenTests.BasicLexing
-```
-Docs helper:
-```bash
-./build_docs.sh
+./run_tests.sh              # build + run tests
+./build_docs.sh             # build Sphinx docs
+./build/compi_tests --gtest_filter=TokenTests.BasicLexing  # single test
 ```
 
 ## 🗂️ Project Structure
@@ -91,5 +74,5 @@ Docs helper:
 ## ✅ Operator Coverage (Summary)
 Arithmetic, shifts, bitwise, comparisons, logical (no short‑circuit semantics), unary minus / logical not, control flow + arrays.
 
-## �️ Roadmap (Short)
+## 🗺️ Roadmap (Short)
 Next focus areas: global vars, function calls, better diagnostics, naming & optimization improvements, integration & coverage tests. Full details: see docs (architecture / roadmap sections).
