@@ -269,7 +269,7 @@ ASTNode* parse_statement(FILE *input) {
     // Create a generic statement node
     stmt_node = create_node(NODE_STATEMENT);
 
-    // Variable declaration: e.g., int x; or int arr[10];
+    // Variable declaration: e.g., int x; or int arr[10]; or struct Point p = {1,2};
     if (match(TOKEN_KEYWORD) && (
             strcmp(current_token.value, "int") == 0 ||
             strcmp(current_token.value, "float") == 0 ||
@@ -279,10 +279,12 @@ ASTNode* parse_statement(FILE *input) {
 
         type_token = current_token;
         advance(input);
+        int is_struct = 0;
         if (strcmp(type_token.value, "struct") == 0) {
-            if (!match(TOKEN_IDENTIFIER)) { printf("Error (line %d): Expected struct name after 'struct'\n", current_token.line); exit(EXIT_FAILURE);}            
+            if (!match(TOKEN_IDENTIFIER)) { printf("Error (line %d): Expected struct name after 'struct'\n", current_token.line); exit(EXIT_FAILURE);}
             // Overwrite type_token with actual struct name for downstream handling
             type_token = current_token; advance(input);
+            is_struct = 1;
         }
 
         // Expect an identifier (variable name)
@@ -297,7 +299,7 @@ ASTNode* parse_statement(FILE *input) {
             // Array declaration: int arr[10];
             int is_array = 0;
             char arr_size_buf[256] = {0};
-        if (match(TOKEN_BRACKET_OPEN)) {
+            if (match(TOKEN_BRACKET_OPEN)) {
                 is_array = 1;
                 advance(input);
                 if (match(TOKEN_NUMBER)) {
@@ -308,8 +310,8 @@ ASTNode* parse_statement(FILE *input) {
                     free(var_decl_node->value);
                     var_decl_node->value = strdup(buf);
                     advance(input);
-            // Register array for bounds checking
-            register_array(name_token.value, atoi(arr_size_buf));
+                    // Register array for bounds checking
+                    register_array(name_token.value, atoi(arr_size_buf));
                 } else {
                     printf("Error (line %d): Expected array size after '['\n", current_token.line);
                     exit(EXIT_FAILURE);
@@ -320,7 +322,7 @@ ASTNode* parse_statement(FILE *input) {
                 }
             }
 
-            // Optionally handle initialization (e.g., int x = 5; or int arr[3] = {1,2,3};)
+            // Optionally handle initialization
             if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
                 advance(input);
                 if (is_array && match(TOKEN_BRACE_OPEN)) {
@@ -337,12 +339,33 @@ ASTNode* parse_statement(FILE *input) {
                         } else if (match(TOKEN_COMMA)) {
                             advance(input);
                         } else {
-                            // Skip unknown tokens
                             advance(input);
                         }
                     }
                     if (!consume(input, TOKEN_BRACE_CLOSE)) {
                         printf("Error (line %d): Expected '}' after array initializer\n", current_token.line);
+                        exit(EXIT_FAILURE);
+                    }
+                    add_child(var_decl_node, init_list);
+                } else if (is_struct && match(TOKEN_BRACE_OPEN)) {
+                    // Struct initializer: {val1, val2, ...}
+                    advance(input);
+                    ASTNode *init_list = create_node(NODE_EXPRESSION); // Use NODE_EXPRESSION for struct initializer list
+                    init_list->value = strdup("struct_init");
+                    while (!match(TOKEN_BRACE_CLOSE) && !match(TOKEN_EOF)) {
+                        if (match(TOKEN_NUMBER) || match(TOKEN_IDENTIFIER)) {
+                            ASTNode *elem = create_node(NODE_EXPRESSION);
+                            elem->value = strdup(current_token.value);
+                            add_child(init_list, elem);
+                            advance(input);
+                        } else if (match(TOKEN_COMMA)) {
+                            advance(input);
+                        } else {
+                            advance(input);
+                        }
+                    }
+                    if (!consume(input, TOKEN_BRACE_CLOSE)) {
+                        printf("Error (line %d): Expected '}' after struct initializer\n", current_token.line);
                         exit(EXIT_FAILURE);
                     }
                     add_child(var_decl_node, init_list);
@@ -1127,9 +1150,33 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 ASTNode *child = node->children[i];
                 // Handle variable declaration with initialization
                 if (child->type == NODE_VAR_DECL) {
-                    // Only emit assignment for scalar variables, not arrays
                     char *arr_bracket = child->value ? strchr(child->value, '[') : NULL;
-                    if (child->num_children > 0 && !arr_bracket) {
+                    int struct_idx = find_struct_index(child->token.value);
+                    if (child->num_children > 0 && !arr_bracket && struct_idx >= 0) {
+                        // Struct initialization: emit field assignments in process block
+                        ASTNode *init = child->children[0];
+                        if (init && init->value && strcmp(init->value, "struct_init") == 0) {
+                            for (int f = 0; f < g_structs[struct_idx].field_count; f++) {
+                                const char *field = g_structs[struct_idx].fields[f].field_name;
+                                const char *val = (f < init->num_children) ? init->children[f]->value : "0";
+                                // Emit correct VHDL for each field type
+                                if (strcmp(g_structs[struct_idx].fields[f].field_type, "int") == 0) {
+                                    if (isdigit(val[0]) || (val[0] == '-' && isdigit(val[1]))) {
+                                        fprintf(output, "      %s.%s <= to_unsigned(%s, 32);\n", child->value, field, val);
+                                    } else {
+                                        fprintf(output, "      %s.%s <= %s;\n", child->value, field, val);
+                                    }
+                                } else {
+                                    fprintf(output, "      %s.%s <= %s;\n", child->value, field, val);
+                                }
+                            }
+                        } else {
+                            // Fallback: treat as assignment to struct variable (not field-by-field)
+                            fprintf(output, "      %s <= ", child->value ? child->value : "unknown");
+                            generate_vhdl(init, output);
+                            fprintf(output, ";\n");
+                        }
+                    } else if (child->num_children > 0 && !arr_bracket) {
                         ASTNode *init = child->children[0];
                         fprintf(output, "      %s <= ", child->value ? child->value : "unknown");
                         generate_vhdl(init, output);
