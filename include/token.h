@@ -29,6 +29,9 @@ typedef struct {
     int line; // Add this field
 } Token;
 
+// Current token (shared parsing state - to be moved into ParserContext later)
+extern Token current_token;
+
 // Keyword check
 int is_keyword(const char *str);
 
