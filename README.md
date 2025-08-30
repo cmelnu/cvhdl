@@ -7,6 +7,7 @@ Minimal C subset → VHDL translator. Focused on simple functions, control flow,
 * Expressions with precedence (arith / shifts / bitwise / compare / logical / unary)
 * Control flow: `if / else if / else`, `while`, `for`, `break`, `continue`
 * Arrays with declarations, initializers, indexed access
+* Function call support (entity instantiation, unique result signals)
 * Basic VHDL code generation (entity/architecture skeleton + signal mapping)
 * Type mapping: `int|float|double|char` → suitable VHDL types
 * GoogleTest unit tests (auto-discovered via CTest)
@@ -18,27 +19,47 @@ Minimal C subset → VHDL translator. Focused on simple functions, control flow,
 git clone https://github.com/cmelnu/compi.git
 cd compi
 mkdir build
-cd build
-cmake ..
-make
+
+## Helper Script: build_and_run.sh
+
+To simplify building and running the compiler, use the provided script:
+
+```sh
+./build_and_run.sh <input.c> [output.vhdl]
 ```
 
-## ▶️ Usage
+This script will:
+- Configure and build the project (if needed)
+- Run the compiler on your input file
+- Output VHDL to the specified file (default: output.vhdl)
+- Show a preview of the generated VHDL
 
-```bash
-./compi input.c output.vhdl
+Example:
+```sh
+./build_and_run.sh examples/example.c
 ```
 
-**Developer Debug Output:**
+---
 
-To enable verbose debug output for developers, configure the build with the `-DDEBUG=ON` argument:
+## Building
 
-```bash
-cmake -DDEBUG=ON ..
-make
+This project uses CMake. To build manually:
+
+```sh
+mkdir -p build
+cmake -S . -B build
+cmake --build build --target compi -j$(nproc)
 ```
 
-This will provide additional debug prints and diagnostics during parsing and code generation.
+This will produce the `compi` binary in `build/`.
+
+## Usage
+
+```sh
+./build/compi examples/example.c output.vhdl
+```
+
+This will parse the input C file and generate VHDL code to `output.vhdl`.
 
 ## 🧪 Testing
 
