@@ -4,6 +4,7 @@ extern "C" {
 #include "parse.h"
 #include "token.h"
 #include "utils.h"
+#include "symbol_arrays.h"
 }
 #include <cstdio>
 #include <cstring>

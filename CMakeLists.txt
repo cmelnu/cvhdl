@@ -19,6 +19,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(COMPI_ALL_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/src/astnode.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/parse.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_expression.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_struct.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_function.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/parse_statement.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/codegen_vhdl.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/token.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/utils.c
   ${CMAKE_CURRENT_SOURCE_DIR}/src/symbol_structs.c

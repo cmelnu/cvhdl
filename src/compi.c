@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "parse.h"
+#include "codegen_vhdl.h"
 
 
 int main(int argc, char *argv[]) {

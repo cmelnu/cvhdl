@@ -5,20 +5,21 @@
 
 // Parsing interface (monolithic for now; will be split further)
 
-// Forward declarations for recursive descent parsing
+// Forward declarations still needed locally
 ASTNode* parse_program(FILE *input);
-ASTNode* parse_function(FILE *input, Token return_type, Token func_name);
-ASTNode* parse_struct(FILE *input, Token struct_token);
-ASTNode* parse_statement(FILE *input);
-ASTNode* parse_expression(FILE *input);
+
+// Other parsing entry points are in their own headers now
+#include "parse_struct.h"
+#include "parse_function.h"
+#include "parse_statement.h"
+#include "parse_expression.h"
 
 ASTNode* create_node(NodeType type);
 void add_child(ASTNode *parent, ASTNode *child);
 void free_node(ASTNode *node);
 void generate_vhdl(ASTNode* node, FILE* output);
 void print_ast(ASTNode* node, int level);
-ASTNode* parse_expression_prec(FILE *input, int min_prec);
-ASTNode* parse_primary(FILE *input);
+// Expression helpers now in parse_expression.h
 
 // Helper for VHDL codegen (still provided by utils)
 int is_negative_literal(const char* value);
