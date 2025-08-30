@@ -51,56 +51,56 @@ ASTNode* parse_program(FILE *input) {
         #ifdef DEBUG
         printf("Parsing token: type=%d, value='%s'\n", current_token.type, current_token.value ? current_token.value : "");
         #endif
-        // Check for function declaration
-        if (match(TOKEN_KEYWORD)) { 
+        // Check for function or struct declaration
+        if (match(TOKEN_KEYWORD)) {
             if (strcmp(current_token.value, "struct") == 0) {
-                Token struct_tok = current_token; advance(input);
+                // Could be struct definition or function returning struct
+                advance(input); // consumed 'struct'
                 if (match(TOKEN_IDENTIFIER)) {
-                    Token name_tok = current_token; advance(input);
+                    Token struct_name_tok = current_token; advance(input);
+                    // Struct definition if '{'
                     if (match(TOKEN_BRACE_OPEN)) {
-                        ASTNode *s = parse_struct(input, name_tok);
+                        ASTNode *s = parse_struct(input, struct_name_tok);
                         if (s) add_child(program_node, s);
                         continue;
                     }
-                }
-            }
-
-            // This could be a return type or variable declaration
-            return_type = current_token;
-            advance(input);
-            
-            if (match(TOKEN_IDENTIFIER)) {
-
-                func_name = current_token;
-                advance(input);
-                
-                if (match(TOKEN_PARENTHESIS_OPEN)) {
-                    // This is likely a function declaration
-                    // Don't rewind the file - this causes problems
-                    func_node = parse_function(input, return_type, func_name);
-                    if (func_node != NULL) {
-                        #ifdef DEBUG
-                        printf("Parsed function: %s\n", func_node->value); // Debug print
-                        #endif
-                        add_child(program_node, func_node);
+                    // Function returning struct: expect function name then '('
+                    if (match(TOKEN_IDENTIFIER)) {
+                        return_type = struct_name_tok; // struct name is return type
+                        func_name = current_token; advance(input);
+                        if (match(TOKEN_PARENTHESIS_OPEN)) {
+                            func_node = parse_function(input, return_type, func_name);
+                            if (func_node) add_child(program_node, func_node);
+                            continue;
+                        } else {
+                            printf("Warning: Expected '(' after function name for struct return function '%s'\n", func_name.value);
+                        }
+                    } else {
+                        printf("Warning: 'struct %s' not followed by function name or '{'\n", struct_name_tok.value);
                     }
                 } else {
-                    // This is likely a global variable declaration
+                    printf("Warning: 'struct' without name at line %d\n", current_token.line);
+                }
+                continue; // handled struct path
+            }
+            // Primitive or known type function
+            return_type = current_token; advance(input);
+            if (match(TOKEN_IDENTIFIER)) {
+                func_name = current_token; advance(input);
+                if (match(TOKEN_PARENTHESIS_OPEN)) {
+                    func_node = parse_function(input, return_type, func_name);
+                    if (func_node) add_child(program_node, func_node);
+                } else {
                     printf("Warning: Global variable declarations not yet implemented\n");
-                    // Skip until semicolon
-                    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
-                        advance(input);
-                    }
+                    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) advance(input);
                     if (match(TOKEN_SEMICOLON)) advance(input);
                 }
             } else {
-                // Skip unknown tokens
-                printf("Warning: Expected identifier after type\n");
+                printf("Warning: Expected identifier after type at line %d\n", current_token.line);
                 advance(input);
             }
         } else {
-            // Skip unknown tokens
-            advance(input);
+            advance(input); // skip unknown
         }
     }
     
@@ -369,82 +369,73 @@ ASTNode* parse_statement(FILE *input) {
         }
     }
 
-    // Assignment statement: x = value; or arr[i] = value;
+    // Assignment statement: x = value; arr[i] = value; struct.field = value; nested field chains
     if (match(TOKEN_IDENTIFIER)) {
         lhs_token = current_token;
         advance(input);
 
-        // Check for array access: arr[i]
-        ASTNode *lhs_expr = NULL;
-    if (match(TOKEN_BRACKET_OPEN)) {
+        // Build up possible field access chain and optional single array index (simple approach)
+        char lhs_buf[1024] = {0};
+        strncpy(lhs_buf, lhs_token.value, sizeof(lhs_buf)-1);
+
+        // Handle field chain: a.b.c  (encode as a__b__c like parse_primary)
+        while (match(TOKEN_OPERATOR) && current_token.value && strcmp(current_token.value, ".") == 0) {
+            advance(input); // consume '.'
+            if (!match(TOKEN_IDENTIFIER)) { printf("Error (line %d): Expected field name after '.' in assignment\n", current_token.line); exit(EXIT_FAILURE);}            
+            strncat(lhs_buf, "__", sizeof(lhs_buf)-strlen(lhs_buf)-1);
+            strncat(lhs_buf, current_token.value, sizeof(lhs_buf)-strlen(lhs_buf)-1);
             advance(input);
-            // Capture full index expression as a string until ']'
+        }
+
+        // Optional array index after the chain (e.g., arr[2] or s.field[3])
+        if (match(TOKEN_BRACKET_OPEN)) {
+            advance(input);
             char idx_buf[512] = {0};
             int paren_depth = 0;
             while (!match(TOKEN_EOF)) {
                 if (match(TOKEN_BRACKET_CLOSE) && paren_depth == 0) break;
-                if (match(TOKEN_PARENTHESIS_OPEN)) {
-                    strncat(idx_buf, "(", sizeof(idx_buf) - strlen(idx_buf) - 1);
-                    advance(input);
-                    paren_depth++;
-                    continue;
-                }
-                if (match(TOKEN_PARENTHESIS_CLOSE)) {
-                    strncat(idx_buf, ")", sizeof(idx_buf) - strlen(idx_buf) - 1);
-                    advance(input);
-                    if (paren_depth > 0) paren_depth--;
-                    continue;
-                }
-                if (current_token.value) {
-                    strncat(idx_buf, current_token.value, sizeof(idx_buf) - strlen(idx_buf) - 1);
-                }
+                if (match(TOKEN_PARENTHESIS_OPEN)) { strncat(idx_buf, "(", sizeof(idx_buf)-strlen(idx_buf)-1); advance(input); paren_depth++; continue; }
+                if (match(TOKEN_PARENTHESIS_CLOSE)) { strncat(idx_buf, ")", sizeof(idx_buf)-strlen(idx_buf)-1); advance(input); if (paren_depth>0) paren_depth--; continue; }
+                if (current_token.value) { strncat(idx_buf, current_token.value, sizeof(idx_buf)-strlen(idx_buf)-1); }
                 advance(input);
             }
-            if (!consume(input, TOKEN_BRACKET_CLOSE)) {
-                printf("Error (line %d): Expected ']' after array index\n", current_token.line);
-                exit(EXIT_FAILURE);
-            }
-            lhs_expr = create_node(NODE_EXPRESSION);
-            char buf[1024];
-            snprintf(buf, sizeof(buf), "%s[%s]", lhs_token.value, idx_buf);
-            lhs_expr->value = strdup(buf);
-            // Static bounds check for numeric literal index
+            if (!consume(input, TOKEN_BRACKET_CLOSE)) { printf("Error (line %d): Expected ']' after array index in assignment\n", current_token.line); exit(EXIT_FAILURE);}            
+            // Append index representation to lhs_buf
+            size_t rem = sizeof(lhs_buf)-strlen(lhs_buf)-1; strncat(lhs_buf, "[", rem); rem = sizeof(lhs_buf)-strlen(lhs_buf)-1; strncat(lhs_buf, idx_buf, rem); rem = sizeof(lhs_buf)-strlen(lhs_buf)-1; strncat(lhs_buf, "]", rem);
+            // Static bounds check only if base (first segment) is an array and index is numeric
             if (is_number_str(idx_buf)) {
-                int idx_val = atoi(idx_buf);
-                int arr_size = find_array_size(lhs_token.value);
-                if (arr_size > 0 && (idx_val < 0 || idx_val >= arr_size)) {
-                    printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n", current_token.line, idx_val, lhs_token.value, arr_size);
-                    exit(EXIT_FAILURE);
+                // Find base name before any '__' (field) or '['
+                char base_name[128]={0};
+                const char *delim = strstr(lhs_buf, "__");
+                size_t len = delim ? (size_t)(delim - lhs_buf) : strcspn(lhs_buf, "[");
+                if (len >= sizeof(base_name)) len = sizeof(base_name)-1;
+                strncpy(base_name, lhs_buf, len);
+                int arr_size = find_array_size(base_name);
+                if (arr_size > 0) {
+                    int idx_val = atoi(idx_buf);
+                    if (idx_val < 0 || idx_val >= arr_size) {
+                        printf("Error (line %d): Array index %d out of bounds for '%s' with size %d\n", current_token.line, idx_val, base_name, arr_size);
+                        exit(EXIT_FAILURE);
+                    }
                 }
             }
-        } else {
-            lhs_expr = create_node(NODE_EXPRESSION);
-            lhs_expr->value = strdup(lhs_token.value);
         }
+
+        ASTNode *lhs_expr = create_node(NODE_EXPRESSION);
+        lhs_expr->value = strdup(lhs_buf);
 
         if (match(TOKEN_OPERATOR) && strcmp(current_token.value, "=") == 0) {
             advance(input);
-
             assign_node = create_node(NODE_ASSIGNMENT);
             add_child(assign_node, lhs_expr);
-
-            // Right-hand side node
             rhs_node = parse_expression(input);
             if (rhs_node) add_child(assign_node, rhs_node);
-
-            // Expect semicolon
-            if (!consume(input, TOKEN_SEMICOLON)) {
-                printf("Error (line %d): Expected ';' after assignment\n", current_token.line);
-                exit(EXIT_FAILURE);
-            }
-
+            if (!consume(input, TOKEN_SEMICOLON)) { printf("Error (line %d): Expected ';' after assignment\n", current_token.line); exit(EXIT_FAILURE);}            
             add_child(stmt_node, assign_node);
             return stmt_node;
         } else {
-            // Not an assignment, skip to semicolon
-            while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
-                advance(input);
-            }
+            // Not an assignment; treat as expression statement already consumed (ignore remainder until ';')
+            while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) advance(input);
             if (match(TOKEN_SEMICOLON)) advance(input);
             free_node(lhs_expr);
             return stmt_node;
@@ -1010,14 +1001,15 @@ void generate_vhdl(ASTNode* node, FILE* output) {
             }
 
             // --- Determine return type for result port ---
-            // Use function return type if possible
-            if (node->token.value && strlen(node->token.value) > 0) {
+            int is_struct_ret = node->token.value && find_struct_index(node->token.value) >= 0;
+            if (is_struct_ret) {
+                fprintf(output, "    result : out %s_t\n", node->token.value);
+            } else if (node->token.value && strlen(node->token.value) > 0) {
                 result_vhdl_type = ctype_to_vhdl(node->token.value);
+                fprintf(output, "    result : out %s\n", result_vhdl_type);
+            } else {
+                fprintf(output, "    result : out std_logic_vector(31 downto 0)\n");
             }
-            // Optionally, check if the return value matches a parameter type
-            // (already handled by function return type in most cases)
-
-            fprintf(output, "    result : out %s\n", result_vhdl_type);
             fprintf(output, "  );\n");
             fprintf(output, "end entity;\n\n");
 
@@ -1149,28 +1141,21 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                     if (child->num_children == 2) {
                         ASTNode *lhs = child->children[0];
                         ASTNode *rhs = child->children[1];
-                        // Check for array access: arr[i]
                         if (lhs->value && strchr(lhs->value, '[')) {
-                            // Convert arr[i] to arr(i) for VHDL
-                            char arr_name[64] = {0};
-                            char arr_idx[64] = {0};
+                            // Array element assignment
+                            char arr_name[64] = {0}; char arr_idx[64] = {0};
                             const char *lbr = strchr(lhs->value, '[');
                             if (lbr) {
-                                int name_len = lbr - lhs->value;
-                                strncpy(arr_name, lhs->value, name_len);
-                                const char *idx_start = lbr + 1;
-                                const char *idx_end = strchr(idx_start, ']');
-                                if (idx_end && idx_end > idx_start) {
-                                    strncpy(arr_idx, idx_start, idx_end - idx_start);
-                                    fprintf(output, "      %s(%s) <= ", arr_name, arr_idx);
-                                    generate_vhdl(rhs, output);
-                                    fprintf(output, ";\n");
-                                } else {
-                                    fprintf(output, "      -- Invalid array index\n");
-                                }
+                                int name_len = lbr - lhs->value; strncpy(arr_name, lhs->value, name_len);
+                                const char *idx_start = lbr + 1; const char *idx_end = strchr(idx_start, ']');
+                                if (idx_end && idx_end > idx_start) { strncpy(arr_idx, idx_start, idx_end - idx_start); fprintf(output, "      %s(%s) <= ", arr_name, arr_idx); generate_vhdl(rhs, output); fprintf(output, ";\n"); }
+                                else { fprintf(output, "      -- Invalid array index\n"); }
                             }
                         } else {
-                            fprintf(output, "      %s <= ", lhs->value ? lhs->value : "unknown");
+                            // General case (supports struct field chains)
+                            fprintf(output, "      ");
+                            generate_vhdl(lhs, output); // convert a__b to a.b
+                            fprintf(output, " <= ");
                             generate_vhdl(rhs, output);
                             fprintf(output, ";\n");
                         }
@@ -1192,21 +1177,44 @@ void generate_vhdl(ASTNode* node, FILE* output) {
                 if (child->type == NODE_BREAK_STATEMENT || child->type == NODE_CONTINUE_STATEMENT) {
                     generate_vhdl(child, output);
                 }
-                // Handle return value: support arithmetic, unary, direct values, bitwise, and comparison expressions
+                // Handle return value: support arithmetic, unary, direct values, bitwise, comparison, and struct return
                 if (child->type == NODE_EXPRESSION) {
-                    fprintf(output, "      result <= ");
-                    if (child->value && child->value[0] == '-' && strlen(child->value) > 1) {
-                        // If it's a negative identifier (e.g., -y)
-                        if (isalpha(child->value[1]) || child->value[1] == '_') {
-                            fprintf(output, "-unsigned(%s)", child->value + 1);
-                        } else {
-                            // Negative number (int or float)
-                            fprintf(output, "to_signed(%s, 32)", child->value);
+                    // Check if returning a struct variable
+                    int is_struct_ret = 0;
+                    const char* struct_ret_name = NULL;
+                    if (node->parent && node->parent->type == NODE_FUNCTION_DECL) {
+                        struct_ret_name = node->parent->token.value;
+                        is_struct_ret = struct_ret_name && find_struct_index(struct_ret_name) >= 0;
+                    }
+                    // Only treat as struct return if expression is a plain identifier (no field/array access)
+                    int plain_ident = 1;
+                    if (child->value) {
+                        for (const char *p = child->value; *p; ++p) {
+                            if (*p == '[' || *p == ']' || *p == '.' ) { plain_ident = 0; break; }
+                        }
+                        if (strstr(child->value, "__")) { plain_ident = 0; }
+                    } else { plain_ident = 0; }
+                    if (is_struct_ret && child->value && plain_ident) {
+                        // Emit field-by-field assignment: result.field <= var.field;
+                        int sidx = find_struct_index(struct_ret_name);
+                        if (sidx >= 0) {
+                            for (int f = 0; f < g_structs[sidx].field_count; f++) {
+                                fprintf(output, "      result.%s <= %s.%s;\n", g_structs[sidx].fields[f].field_name, child->value, g_structs[sidx].fields[f].field_name);
+                            }
                         }
                     } else {
-                        generate_vhdl(child, output);
+                        fprintf(output, "      result <= ");
+                        if (child->value && child->value[0] == '-' && strlen(child->value) > 1) {
+                            if (isalpha(child->value[1]) || child->value[1] == '_') {
+                                fprintf(output, "-unsigned(%s)", child->value + 1);
+                            } else {
+                                fprintf(output, "to_signed(%s, 32)", child->value);
+                            }
+                        } else {
+                            generate_vhdl(child, output);
+                        }
+                        fprintf(output, ";\n");
                     }
-                    fprintf(output, ";\n");
                 }
                 if (child->type == NODE_BINARY_EXPR) {
                     fprintf(output, "      result <= ");
