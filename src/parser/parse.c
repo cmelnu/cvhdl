@@ -18,9 +18,14 @@ extern Token current_token;
 
 // Parse the entire program: delegates to specialized modules
 ASTNode* parse_program(FILE *input) {
-    Token func_name, return_type;
+    Token func_name = (Token){0};
+    Token return_type = (Token){0};
+    Token struct_name_tok = (Token){0};
     ASTNode *func_node = NULL;
-    ASTNode* program_node = create_node(NODE_PROGRAM);
+    ASTNode *program_node = NULL;
+    ASTNode *s = NULL;
+
+    program_node = create_node(NODE_PROGRAM);
 
     advance(input); // prime tokenizer
 
@@ -32,18 +37,24 @@ ASTNode* parse_program(FILE *input) {
             if (strcmp(current_token.value, "struct") == 0) {
                 advance(input); // consume 'struct'
                 if (match(TOKEN_IDENTIFIER)) {
-                    Token struct_name_tok = current_token; advance(input);
+                    struct_name_tok = current_token;
+                    advance(input);
                     if (match(TOKEN_BRACE_OPEN)) { // struct definition
-                        ASTNode *s = parse_struct(input, struct_name_tok);
-                        if (s) add_child(program_node, s);
+                        s = parse_struct(input, struct_name_tok);
+                        if (s) {
+                            add_child(program_node, s);
+                        }
                         continue;
                     }
                     if (match(TOKEN_IDENTIFIER)) { // function returning struct
                         return_type = struct_name_tok;
-                        func_name = current_token; advance(input);
+                        func_name = current_token;
+                        advance(input);
                         if (match(TOKEN_PARENTHESIS_OPEN)) {
                             func_node = parse_function(input, return_type, func_name);
-                            if (func_node) add_child(program_node, func_node);
+                            if (func_node) {
+                                add_child(program_node, func_node);
+                            }
                             continue;
                         } else {
                             printf("Warning: Expected '(' after function name for struct return function '%s'\n", func_name.value);
@@ -57,16 +68,24 @@ ASTNode* parse_program(FILE *input) {
                 continue;
             }
             // primitive or known type function
-            return_type = current_token; advance(input);
+            return_type = current_token;
+            advance(input);
             if (match(TOKEN_IDENTIFIER)) {
-                func_name = current_token; advance(input);
+                func_name = current_token;
+                advance(input);
                 if (match(TOKEN_PARENTHESIS_OPEN)) {
                     func_node = parse_function(input, return_type, func_name);
-                    if (func_node) add_child(program_node, func_node);
+                    if (func_node) {
+                        add_child(program_node, func_node);
+                    }
                 } else {
                     printf("Warning: Global variable declarations not yet implemented\n");
-                    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) advance(input);
-                    if (match(TOKEN_SEMICOLON)) advance(input);
+                    while (!match(TOKEN_SEMICOLON) && !match(TOKEN_EOF)) {
+                        advance(input);
+                    }
+                    if (match(TOKEN_SEMICOLON)) {
+                        advance(input);
+                    }
                 }
             } else {
                 printf("Warning: Expected identifier after type at line %d\n", current_token.line);

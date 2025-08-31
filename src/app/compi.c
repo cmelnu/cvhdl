@@ -8,18 +8,25 @@
 
 int main(int argc, char *argv[]) {
 
+    FILE *fin = NULL;
+    FILE *fout = NULL;
+    ASTNode *program = NULL;
+
+    // Check arguments
     if (argc < 3) {
         printf("Usage: %s <input.c> <output.vhdl>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    FILE *fin = fopen(argv[1], "r");
+    // Open input file
+    fin = fopen(argv[1], "r");
     if (!fin) {
         perror("Error opening input file");
         exit(EXIT_FAILURE);
     }
 
-    FILE *fout = fopen(argv[2], "w");
+    // Open output file
+    fout = fopen(argv[2], "w");
     if (!fout) {
         perror("Error opening output file");
         fclose(fin);
@@ -27,9 +34,9 @@ int main(int argc, char *argv[]) {
     }
 
     printf("Parsing input file...\n");
-    
+
     // Parse the program and build the AST
-    ASTNode* program = parse_program(fin);
+    program = parse_program(fin);
 
     #ifdef DEBUG
         print_ast(program, 0); // Print the AST for debugging if -d is passed
@@ -43,6 +50,8 @@ int main(int argc, char *argv[]) {
     } else {
         fprintf(fout, "-- VHDL code generation failed\n");
         fprintf(fout, "-- AST was not generated successfully\n");
+        fclose(fin);
+        fclose(fout);
         exit(EXIT_FAILURE);
     }
 
@@ -50,5 +59,5 @@ int main(int argc, char *argv[]) {
     fclose(fout);
 
     printf("Compilation finished.\n");
-    exit(EXIT_SUCCESS);    
+    exit(EXIT_SUCCESS);
 }
