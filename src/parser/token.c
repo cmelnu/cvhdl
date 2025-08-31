@@ -40,7 +40,8 @@ int consume(FILE *input, TokenType type) {
 // Check if a string is a keyword
 int is_keyword(const char *str) {
 
-    for (int i = 0; keywords[i] != NULL; i++) {
+    int i = 0;
+    for (i = 0; keywords[i] != NULL; i++) {
         if (strcmp(str, keywords[i]) == 0) {
             return 1;
         }
@@ -51,8 +52,11 @@ int is_keyword(const char *str) {
 // Get the next token from input
 Token get_next_token(FILE *input) {
     
-    Token token;
-    int c;
+    Token token = {0};
+    int c = 0;
+    int d = 0;
+    int i = 0;
+    int prev = 0;
 
     token.line = current_line; // Track line at start of token
 
@@ -68,7 +72,7 @@ Token get_next_token(FILE *input) {
 
     // Handle comments starting with // or /* */
     if (c == '/') {
-        int d = fgetc(input);
+        d = fgetc(input);
         if (d == '/') {
             // Line comment
             while ((c = fgetc(input)) != EOF && c != '\n');
@@ -76,7 +80,7 @@ Token get_next_token(FILE *input) {
             return get_next_token(input);
         } else if (d == '*') {
             // Block comment
-            int prev = 0;
+            prev = 0;
             while ((c = fgetc(input)) != EOF) {
                 if (c == '\n') current_line++;
                 if (prev == '*' && c == '/') break;
@@ -95,44 +99,34 @@ Token get_next_token(FILE *input) {
 
     // Identifier or keyword
     if (isalpha(c) || c == '_') {
-
-        int i = 0;
+        i = 0;
         token.value[i++] = c;
-
         while ((c = fgetc(input)) != EOF && (isalnum(c) || c == '_')) {
             if (i < 255) token.value[i++] = c;
         }
         token.value[i] = '\0';
-
         if (c != EOF) ungetc(c, input);
-
         token.type = is_keyword(token.value) ? TOKEN_KEYWORD : TOKEN_IDENTIFIER;
         return token;
-
     } 
     // Number
     else if (isdigit(c)) {
-
-        int i = 0;
+        i = 0;
         token.value[i++] = c;
-
         while ((c = fgetc(input)) != EOF && (isdigit(c) || c == '.')) {
             if (i < 255) token.value[i++] = c;
         }
         token.value[i] = '\0';
-
         if (c != EOF) ungetc(c, input);
-
         token.type = TOKEN_NUMBER;
         return token;
     } 
     // Operators and punctuation (including multi-char ops)
     else {
-        int d = fgetc(input);
+        d = fgetc(input);
         token.value[0] = (char)c;
         token.value[1] = '\0';
         token.value[2] = '\0';
-
         // Punctuation
         switch (c) {
             case ';': token.type = TOKEN_SEMICOLON; if (d != EOF) ungetc(d, input); return token;
@@ -145,7 +139,6 @@ Token get_next_token(FILE *input) {
             case ',': token.type = TOKEN_COMMA; if (d != EOF) ungetc(d, input); return token;
             default: break;
         }
-
         // Multi-character operators: ==, !=, <=, >=, <<, >>, &&, ||, ++, --
         token.type = TOKEN_OPERATOR;
         if (c == '=' && d == '=') {
@@ -194,7 +187,6 @@ Token get_next_token(FILE *input) {
             token.value[0] = (char)c;
             token.value[1] = '\0';
         }
-
         return token;
     }
 }
